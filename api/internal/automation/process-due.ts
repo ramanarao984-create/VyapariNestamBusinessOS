@@ -1,8 +1,19 @@
-import type {VercelRequest, VercelResponse} from '@vercel/node';
 import {DurableAutomationEngine} from '../../../src/services/automation/DurableAutomationEngine';
 import {isAuthorizedCronRequest} from '../../_lib/cronAuth';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+type CronRequest = {
+  method?: string;
+  headers: Record<string, string | string[] | undefined>;
+  query?: Record<string, string | string[] | undefined>;
+};
+
+type JsonResponse = {
+  setHeader: (name: string, value: string) => void;
+  status: (statusCode: number) => JsonResponse;
+  json: (body: unknown) => unknown;
+};
+
+export default async function handler(req: CronRequest, res: JsonResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {
     res.setHeader('Allow', 'GET, POST');
     return res.status(405).json({success: false, error: 'Method not allowed'});
