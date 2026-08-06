@@ -4,7 +4,7 @@ Last updated: 2026-08-07
 
 ## Current Score
 
-Estimated readiness: **79 / 100**
+Estimated readiness: **81 / 100**
 
 This score assumes the latest GitHub `main` branch is deployed to Vercel and required production environment variables are present. It is not a launch approval until live auth, database, WhatsApp webhook, AI, and automation paths pass end-to-end verification.
 
@@ -21,7 +21,7 @@ This score assumes the latest GitHub `main` branch is deployed to Vercel and req
 | WhatsApp Runtime | 7/10 | Improving | Persistence, consent, conversation window, handover, outbound jobs, and a Vercel-safe automation cron worker exist. Remaining work: live webhook verification, Meta app production review, rate limits, replay tests. |
 | AI Agent | 7/10 | Improving | AI safety utilities now cover prompt-injection detection, PII redaction, and prompt size checks. Remaining work: wire guardrails into live AI endpoints, per-tenant usage caps, eval suite, model/provider failure policies. |
 | Chatbot Builder | 7/10 | Improving | Flow structure/version validation utilities exist. Remaining work: publish/version controls, invalid-flow validation in UI/API, rollback, simulation, channel policy enforcement. |
-| UI/UX | 8/10 | Strong | UI appears polished and domain-tailored. Remaining work: verify mobile/responsive flows, loading/error states, accessibility, large-bundle performance. |
+| UI/UX | 8/10 | Strong | UI appears polished and domain-tailored. Remaining work: verify mobile/responsive flows, loading/error states, accessibility, and route-level lazy loading. |
 | Observability | 5/10 | Early | Health function and structured request logging exist. Remaining work: Vercel runtime error monitoring, Sentry/PostHog or equivalent, audit dashboards, alerting. |
 | CI/Test Coverage | 9/10 | Improving | CI, unit tests, auth tests, cron worker tests, AI safety tests, SQL migration policy tests, and production preflight checks exist. Remaining work: e2e tests against deployed preview, webhook contract tests, Supabase branch tests. |
 
@@ -56,3 +56,4 @@ This score assumes the latest GitHub `main` branch is deployed to Vercel and req
 - Added baseline Vercel security headers.
 - Added production preflight checks to CI and made the health endpoint fail closed when critical runtime configuration is missing.
 - Removed internal cron/database error details from HTTP error responses and resolved cron Supabase client type-check errors.
+- Split frontend vendor bundles; latest Vercel build reduced the main JavaScript chunk from approximately 1.48 MB to 741 KB.
