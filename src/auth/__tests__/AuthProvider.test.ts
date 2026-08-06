@@ -1,19 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { User } from 'firebase/auth';
+import { normalizeAuthUser } from '../AuthProvider';
 
-const normalizeAuthUser = (authUser: User): User => {
-  if (authUser.email) {
-    return authUser;
-  }
-
-  const providerEmail = authUser.providerData?.find((profile) => Boolean(profile.email))?.email;
-  return {
-    ...authUser,
-    email: providerEmail || `${authUser.uid}@firebase.local`,
-  } as User;
-};
-
-describe('auth user normalization', () => {
+describe('normalizeAuthUser', () => {
   it('keeps the Firebase email when one is present', () => {
     const user = {
       uid: 'firebase-uid-1',
