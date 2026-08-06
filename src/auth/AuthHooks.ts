@@ -31,7 +31,7 @@ export const useAuthUser = () => {
  */
 export const useGoogleToken = () => {
   const { accessToken } = useAuth();
-  
+
   return {
     accessToken,
     isGoogleAuthorized: !!accessToken,
@@ -45,10 +45,11 @@ export const useGoogleToken = () => {
  * Hook targeting the interactive authentication actions and callbacks.
  */
 export const useAuthActions = () => {
-  const { loginWithPopup, loginWithRedirect, loginWithDemoGmail, logout, refreshSession } = useAuth();
-  
+  const { loginWithPopup, authorizeGoogleWorkspace, loginWithRedirect, loginWithDemoGmail, logout, refreshSession } = useAuth();
+
   return {
     loginWithPopup,
+    authorizeGoogleWorkspace,
     loginWithRedirect,
     loginWithDemoGmail,
     logout,
