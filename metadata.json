@@ -1,0 +1,6 @@
+{
+  "name": "Vyapari Nestam Business OS",
+  "description": "A comprehensive 360-degree CRM and WhatsApp automation hub built for service clinics and medical professionals to manage customer journeys, auto-triggers, Google SEO, reviews, and client messaging.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
