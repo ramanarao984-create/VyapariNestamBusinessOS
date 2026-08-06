@@ -4,7 +4,7 @@ Last updated: 2026-08-07
 
 ## Current Score
 
-Estimated readiness: **76 / 100**
+Estimated readiness: **79 / 100**
 
 This score assumes the latest GitHub `main` branch is deployed to Vercel and required production environment variables are present. It is not a launch approval until live auth, database, WhatsApp webhook, AI, and automation paths pass end-to-end verification.
 
@@ -12,8 +12,8 @@ This score assumes the latest GitHub `main` branch is deployed to Vercel and req
 
 | Area | Score | Status | Notes |
 | --- | ---: | --- | --- |
-| Deployment | 7/10 | Improving | Vercel builds are passing. Real `api/` functions exist for health and automation cron. Remaining work: full API route coverage or Express refactor. |
-| Security | 7/10 | Improving | Browser-side Meta token persistence removed, Google OAuth scope posture documented, security headers added, cron auth supports Vercel Bearer secrets. Remaining work: CSP, rate limiting, secret rotation runbook, live security scan. |
+| Deployment | 7/10 | Improving | Vercel builds are passing. Real `api/` functions exist for health and automation cron. Remaining work: full API route coverage or Express refactor; resolve Vercel TypeScript warnings. |
+| Security | 7/10 | Improving | Browser-side Meta token persistence removed, Google OAuth scope posture documented, security headers added, cron auth supports Vercel Bearer secrets. Remaining work: CSP, rate limiting, secret rotation runbook, live security scan; confirm health fails closed in production. |
 | Auth & Identity | 7/10 | Improving | Firebase Google sign-in now supports Gmail and Workspace identities, with Workspace API authorization separated from login. Remaining work: verify Google consent screen publishing/scopes and user onboarding edge cases. |
 | Multi-Tenant Isolation | 7/10 | Needs Live DB Proof | SQL migrations generally enable RLS for tenant-facing tables. Migration policy tests now guard RLS and unsafe grants. Remaining work: live Supabase project must be active and inspected for applied migrations/policies. |
 | Schema Readiness | 7/10 | Needs Live DB Proof | Migrations cover WhatsApp, Google vault, tenant sector config, automation, audit metadata. Remaining work: check live drift, indexes, constraints, and backup/restore posture. |
@@ -23,7 +23,7 @@ This score assumes the latest GitHub `main` branch is deployed to Vercel and req
 | Chatbot Builder | 7/10 | Improving | Flow structure/version validation utilities exist. Remaining work: publish/version controls, invalid-flow validation in UI/API, rollback, simulation, channel policy enforcement. |
 | UI/UX | 8/10 | Strong | UI appears polished and domain-tailored. Remaining work: verify mobile/responsive flows, loading/error states, accessibility, large-bundle performance. |
 | Observability | 5/10 | Early | Health function and structured request logging exist. Remaining work: Vercel runtime error monitoring, Sentry/PostHog or equivalent, audit dashboards, alerting. |
-| CI/Test Coverage | 8/10 | Improving | CI, unit tests, auth tests, cron worker tests, AI safety tests, and SQL migration policy tests exist. Remaining work: e2e tests against deployed preview, webhook contract tests, Supabase branch tests. |
+| CI/Test Coverage | 9/10 | Improving | CI, unit tests, auth tests, cron worker tests, AI safety tests, SQL migration policy tests, and production preflight checks exist. Remaining work: e2e tests against deployed preview, webhook contract tests, Supabase branch tests. |
 
 ## Blockers To Reach 90/100
 
@@ -54,3 +54,5 @@ This score assumes the latest GitHub `main` branch is deployed to Vercel and req
 - Wired automation cron directly to Supabase queue claiming, consent checks, quiet-hours handling, outbound job enqueue, and execution/action status updates.
 - Added AI/chatbot safety utilities and tests.
 - Added baseline Vercel security headers.
+- Added production preflight checks to CI and made the health endpoint fail closed when critical runtime configuration is missing.
+- Removed internal cron/database error details from HTTP error responses and resolved cron Supabase client type-check errors.
