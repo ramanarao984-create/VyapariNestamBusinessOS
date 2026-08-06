@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Manrope:wght@500;600;700;800&family=Poppins:wght@600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Poppins", "Manrope", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Brand Colors */
+  --color-brand-teal: #176B72;
+  --color-brand-teal-dark: #10555C;
+  --color-brand-orange: #F28C1B;
+  --color-brand-yellow: #F5B820;
+  --color-brand-green: #6E9F50;
+  
+  /* Semantic Colors */
+  --color-vn-background: #F6F8F8;
+  --color-vn-surface: #FFFFFF;
+  --color-vn-text-primary: #172B2D;
+  --color-vn-text-secondary: #5F6F71;
+  --color-vn-text-muted: #596A6C;
+  --color-vn-border: #DDE5E5;
+  --color-vn-error: #C83C3C;
+  --color-vn-warning: #B96A0B;
+  --color-vn-info: #247A9B;
+  --color-vn-success: #15803D;
+}
+
+:root {
+  /* Primary & Accent Semantic Tokens */
+  --color-primary: #176B72;
+  --color-primary-hover: #10555C;
+  --color-primary-foreground: #FFFFFF;
+  --color-accent-orange: #F28C1B;
+  --color-accent-yellow: #F5B820;
+  --color-background: #F6F8F8;
+  --color-surface: #FFFFFF;
+  --color-text-primary: #172B2D;
+  --color-text-secondary: #5F6F71;
+  --color-text-muted: #596A6C;
+  --color-border: #DDE5E5;
+  --color-focus: #176B72;
+  --color-success: #6E9F50;
+  --color-warning: #B96A0B;
+  --color-danger: #C83C3C;
+  --color-info: #247A9B;
+
+  /* Typography Scale */
+  --font-size-page-title: 28px;
+  --line-height-page-title: 36px;
+  --font-size-section-title: 20px;
+  --line-height-section-title: 28px;
+  --font-size-card-title: 16px;
+  --line-height-card-title: 24px;
+  --font-size-body: 14px;
+  --line-height-body: 21px;
+  --font-size-label: 13px;
+  --line-height-label: 18px;
+  --font-size-helper: 12px;
+  --line-height-helper: 18px;
+  --font-size-table-header: 12px;
+  --line-height-table-header: 16px;
+  --font-size-kpi: 28px;
+  --line-height-kpi: 36px;
+
+  /* Spacing Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Control Heights & Radii */
+  --radius-card: 12px;
+  --radius-input: 8px;
+  --radius-button: 8px;
+  --height-control: 40px;
+  --height-control-compact: 32px;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Accessible visible focus styles */
+.vn-focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.vn-focus-ring:focus-visible {
+  outline: 2px solid #176B72;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px rgba(23, 107, 114, 0.2);
+}
+
+/* Custom scrollbar styling for a clean look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; /* slate-400 */
+}
+
+/* Animated status pulse */
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.status-pulse {
+  animation: statusPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
