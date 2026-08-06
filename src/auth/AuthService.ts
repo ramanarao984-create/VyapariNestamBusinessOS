@@ -3,19 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { 
-  User, 
-  signInWithPopup, 
-  signInWithRedirect, 
-  getRedirectResult, 
-  signOut, 
+import {
+  User,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signOut,
   onAuthStateChanged,
   setPersistence,
   browserLocalPersistence,
   GoogleAuthProvider,
-  UserCredential
 } from 'firebase/auth';
-import { auth, provider } from '../firebase';
+import { auth } from '../firebase';
 
 // Custom typed exceptions for authentication errors
 export class AuthNetworkException extends Error {
@@ -47,12 +46,8 @@ class AuthServiceSingleton {
   private _expiresAt: number | null = null;
   private _isRedirectChecking = false;
 
-  private readonly TOKEN_KEY = 'nestam_google_access_token';
-  private readonly EXPIRES_KEY = 'nestam_google_access_token_expires_at';
-
   constructor() {
     this.log('Init', 'INFO', 'Initializing enterprise AuthService architecture.');
-    // Set persistent session behavior for Firebase (survives tab/browser restarts)
     setPersistence(auth, browserLocalPersistence)
       .then(() => {
         this.log('Init', 'INFO', 'Explicit browser local persistence set successfully.');
@@ -60,9 +55,26 @@ class AuthServiceSingleton {
       .catch((err) => {
         this.log('Init', 'ERROR', 'Failed to configure local persistence.', err);
       });
-    
-    // Warm cache from sessionStorage (safe transient storage, not persistent like localStorage)
+
     this.loadTokenFromSessionStorage();
+  }
+
+  private buildGoogleProvider(includeWorkspaceScopes = false): GoogleAuthProvider {
+    const googleProvider = new GoogleAuthProvider();
+    googleProvider.addScope('openid');
+    googleProvider.addScope('profile');
+    googleProvider.addScope('email');
+
+    if (includeWorkspaceScopes) {
+      googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+      googleProvider.addScope('https://www.googleapis.com/auth/calendar.events');
+      googleProvider.addScope('https://www.googleapis.com/auth/business.manage');
+      googleProvider.setCustomParameters({ prompt: 'consent select_account' });
+    } else {
+      googleProvider.setCustomParameters({ prompt: 'select_account' });
+    }
+
+    return googleProvider;
   }
 
   /**
@@ -76,9 +88,9 @@ class AuthServiceSingleton {
    * Helper to perform centralized structured logging
    */
   public log(
-    event: AuthLogEntry['event'], 
-    level: AuthLogLevel, 
-    message: string, 
+    event: AuthLogEntry['event'],
+    level: AuthLogLevel,
+    message: string,
     details?: any
   ) {
     const entry: AuthLogEntry = {
@@ -86,7 +98,7 @@ class AuthServiceSingleton {
       level,
       event,
       message,
-      details
+      details,
     };
     const logString = `[${entry.timestamp}] [${entry.level}] [AuthService:${entry.event}] ${entry.message}`;
     if (level === 'ERROR') {
@@ -132,11 +144,11 @@ class AuthServiceSingleton {
   }
 
   /**
-   * Phase 2 Hardened Security: Integration credentials managed purely server-side.
+   * Phase 2 Hardened Security: keep Workspace API tokens in memory only.
    */
   private saveTokenToSessionStorage(token: string, expiresInSeconds = 3600) {
-    this._accessToken = null;
-    this._expiresAt = null;
+    this._accessToken = token || null;
+    this._expiresAt = token ? Date.now() + expiresInSeconds * 1000 : null;
   }
 
   /**
@@ -184,11 +196,12 @@ class AuthServiceSingleton {
 
       if (result) {
         const credential = GoogleAuthProvider.credentialFromResult(result);
-        if (credential?.accessToken) {
-          this.log('Login', 'INFO', `Google OAuth redirect resolved successfully for user: ${result.user.email}`);
-          this.saveTokenToSessionStorage(credential.accessToken);
-          return { user: result.user, accessToken: credential.accessToken };
+        const accessToken = credential?.accessToken || '';
+        if (accessToken) {
+          this.saveTokenToSessionStorage(accessToken);
         }
+        this.log('Login', 'INFO', `Google OAuth redirect resolved successfully for user: ${result.user.email}`);
+        return { user: result.user, accessToken };
       }
       return null;
     } catch (error: any) {
@@ -199,25 +212,32 @@ class AuthServiceSingleton {
   }
 
   /**
-   * Popup Sign-In interface.
+   * Basic Google sign-in. Requests only identity scopes.
    */
   public async signInWithPopup(): Promise<{ user: User; accessToken: string }> {
-    this.log('Login', 'INFO', 'Initiating interactive Google popup sign-in...');
-    try {
-      // Ensure Google scopes are requested
-      provider.addScope('https://www.googleapis.com/auth/spreadsheets');
-      provider.addScope('https://www.googleapis.com/auth/calendar.events');
-      provider.addScope('https://www.googleapis.com/auth/business.manage');
-      provider.setCustomParameters({ prompt: 'select_account' });
+    return this.runGooglePopup(false);
+  }
 
+  /**
+   * Explicit Google Workspace authorization. Requests Sheets, Calendar, and Business Profile scopes.
+   */
+  public async authorizeGoogleWorkspace(): Promise<{ user: User; accessToken: string }> {
+    return this.runGooglePopup(true);
+  }
+
+  private async runGooglePopup(includeWorkspaceScopes: boolean): Promise<{ user: User; accessToken: string }> {
+    this.log('Login', 'INFO', includeWorkspaceScopes ? 'Initiating Google Workspace API authorization...' : 'Initiating interactive Google sign-in...');
+    const googleProvider = this.buildGoogleProvider(includeWorkspaceScopes);
+
+    try {
       let result;
       try {
-        result = await signInWithPopup(auth, provider);
+        result = await signInWithPopup(auth, googleProvider);
       } catch (popupErr: any) {
         if (popupErr?.code === 'auth/popup-blocked' || popupErr?.message?.includes('popup-blocked')) {
           this.log('Login', 'WARN', 'Popup sign-in was blocked by browser. Attempting fallback to redirect sign-in...', popupErr);
           try {
-            await signInWithRedirect(auth, provider);
+            await signInWithRedirect(auth, googleProvider);
             throw new Error('Redirecting to Google Sign-In page...');
           } catch (redirectErr: any) {
             this.log('Login', 'WARN', 'Redirect fallback also unavailable in iframe context.', redirectErr);
@@ -228,13 +248,17 @@ class AuthServiceSingleton {
       }
 
       const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (!credential?.accessToken) {
-        throw new Error('Google OAuth access token was missing from credential output.');
+      const accessToken = credential?.accessToken || '';
+
+      if (includeWorkspaceScopes && !accessToken) {
+        throw new Error('Google Workspace OAuth access token was missing from credential output.');
       }
 
-      this.log('Login', 'INFO', `Popup sign-in completed successfully for user: ${result.user.email}`);
-      this.saveTokenToSessionStorage(credential.accessToken);
-      return { user: result.user, accessToken: credential.accessToken };
+      this.log('Login', 'INFO', `Google ${includeWorkspaceScopes ? 'Workspace authorization' : 'sign-in'} completed successfully for user: ${result.user.email}`);
+      if (accessToken) {
+        this.saveTokenToSessionStorage(accessToken);
+      }
+      return { user: result.user, accessToken };
     } catch (error: any) {
       if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/popup-closed-by-user' || error?.code === 'auth/cancelled-popup-request') {
         this.log('Login', 'WARN', 'Popup sign-in was cancelled or blocked by browser', error);
@@ -245,7 +269,7 @@ class AuthServiceSingleton {
         (err as any).code = 'auth/unauthorized-domain';
         throw err;
       } else if (
-        error?.code === 'auth/internal-error' || 
+        error?.code === 'auth/internal-error' ||
         error?.message?.includes('internal-error') ||
         error?.code === 'auth/operation-not-allowed'
       ) {
@@ -258,17 +282,12 @@ class AuthServiceSingleton {
   }
 
   /**
-   * Redirect Sign-In interface.
+   * Redirect Sign-In interface. Uses identity scopes only.
    */
   public async signInWithRedirect(): Promise<void> {
     this.log('Login', 'INFO', 'Initiating Google redirect sign-in...');
     try {
-      provider.addScope('https://www.googleapis.com/auth/spreadsheets');
-      provider.addScope('https://www.googleapis.com/auth/calendar.events');
-      provider.addScope('https://www.googleapis.com/auth/business.manage');
-      provider.setCustomParameters({ prompt: 'select_account' });
-
-      await signInWithRedirect(auth, provider);
+      await signInWithRedirect(auth, this.buildGoogleProvider(false));
     } catch (error: any) {
       this.log('Login', 'WARN', 'Redirect sign-in failed to initiate', error);
       throw error;
@@ -284,7 +303,6 @@ class AuthServiceSingleton {
   ): () => void {
     let active = true;
 
-    // Check redirect result on subscription mount
     this.handleRedirectResult()
       .then((redirectResult) => {
         if (!active) return;
@@ -296,19 +314,15 @@ class AuthServiceSingleton {
         this.log('Init', 'ERROR', 'Error handling redirect resolution inside event listener subscription.', err);
       });
 
-    // Subscribe to Firebase main session
     const unsubscribe = onAuthStateChanged(auth, async (user: User | null) => {
       if (!active) return;
 
       if (user) {
-        // If we have an active Firebase session, check if we have a valid cached Google access token
         const activeToken = this.getAccessToken();
         if (activeToken) {
           this.log('Session Restore', 'INFO', `Session automatically restored for user: ${user.email}`);
           onAuthSuccess(user, activeToken);
         } else {
-          // Token is missing/expired. Stay logged in with empty string for token.
-          // The application handles this gracefully by presenting a simple "Authorize Google" prompt.
           this.log('Token Expired', 'WARN', `Persistent Firebase user detected but Google OAuth token is absent or expired for: ${user.email}`);
           onAuthSuccess(user, '');
         }
