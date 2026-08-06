@@ -67,7 +67,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, []);
 
+  const authorizeGoogleWorkspace = async () => {
+    setIsLoggingIn(true);
+    setError(null);
+    try {
+      const result = await AuthService.authorizeGoogleWorkspace();
+      setUser(normalizeAuthUser(result.user));
+      setAccessToken(result.accessToken || null);
+    } catch (err: any) {
+      const message = err.message || 'Google Workspace authorization failed.';
+      setError(message);
+      AuthService.log('Login', 'WARN', 'Workspace authorization exception caught inside provider.', err);
+      throw err;
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
   const loginWithPopup = async () => {
+    if (user) {
+      await authorizeGoogleWorkspace();
+      return;
+    }
+
     setIsLoggingIn(true);
     setError(null);
     try {
@@ -110,23 +132,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else {
         AuthService.log('Login', 'ERROR', 'Popup log-in exception caught inside provider.', err);
       }
-      throw err;
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const authorizeGoogleWorkspace = async () => {
-    setIsLoggingIn(true);
-    setError(null);
-    try {
-      const result = await AuthService.authorizeGoogleWorkspace();
-      setUser(normalizeAuthUser(result.user));
-      setAccessToken(result.accessToken || null);
-    } catch (err: any) {
-      const message = err.message || 'Google Workspace authorization failed.';
-      setError(message);
-      AuthService.log('Login', 'WARN', 'Workspace authorization exception caught inside provider.', err);
       throw err;
     } finally {
       setIsLoggingIn(false);
