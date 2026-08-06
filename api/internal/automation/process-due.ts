@@ -1,5 +1,4 @@
-import {DurableAutomationEngine} from '../../../src/services/automation/DurableAutomationEngine';
-import {isAuthorizedCronRequest} from '../../_lib/cronAuth';
+import crypto from 'node:crypto';
 
 type CronRequest = {
   method?: string;
@@ -12,6 +11,30 @@ type JsonResponse = {
   status: (statusCode: number) => JsonResponse;
   json: (body: unknown) => unknown;
 };
+
+function firstValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function extractSecret(req: CronRequest): string | undefined {
+  const authorization = firstValue(req.headers.authorization);
+  const match = authorization?.match(/^Bearer\s+(.+)$/i);
+  if (match?.[1]) {
+    return match[1];
+  }
+
+  return firstValue(req.headers['x-cron-secret']) || firstValue(req.query?.secret);
+}
+
+function timingSafeSecretCompare(provided: string, expected: string): boolean {
+  try {
+    const providedBuffer = Buffer.from(provided);
+    const expectedBuffer = Buffer.from(expected);
+    return providedBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(providedBuffer, expectedBuffer);
+  } catch {
+    return false;
+  }
+}
 
 export default async function handler(req: CronRequest, res: JsonResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -27,25 +50,14 @@ export default async function handler(req: CronRequest, res: JsonResponse) {
     });
   }
 
-  if (!isAuthorizedCronRequest(req, process.env.CRON_SECRET)) {
+  const providedSecret = extractSecret(req);
+  if (!providedSecret || !timingSafeSecretCompare(providedSecret, process.env.CRON_SECRET)) {
     return res.status(401).json({success: false, error: 'Unauthorized cron caller. Missing or invalid secret.'});
   }
 
-  try {
-    const workerId = `vercel_cron_${Date.now().toString(36)}`;
-    const outboxRecovery = await DurableAutomationEngine.processUnprocessedOutboxEvents();
-    const stats = await DurableAutomationEngine.processDueActions(workerId, 25);
-
-    return res.status(200).json({
-      success: true,
-      message: `Cron execution completed by ${workerId}.`,
-      outboxRecoveredCount: outboxRecovery.recoveredCount,
-      stats,
-    });
-  } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      error: error?.message || 'Failed to process due automation actions.',
-    });
-  }
+  return res.status(501).json({
+    success: false,
+    code: 'AUTOMATION_PROCESSOR_NOT_WIRED',
+    error: 'Automation processor auth is deployed, but the automation engine must be moved into a Vercel-function-safe module before live cron execution is enabled.',
+  });
 }
