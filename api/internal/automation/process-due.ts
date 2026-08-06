@@ -34,11 +34,11 @@ type AutomationSettings = {
   quiet_hours_end?: string;
 };
 
-function firstValue(value: string | string[] | undefined): string | undefined {
+export function firstValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function extractSecret(req: CronRequest): string | undefined {
+export function extractSecret(req: CronRequest): string | undefined {
   const authorization = firstValue(req.headers.authorization);
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
   if (match?.[1]) {
@@ -48,7 +48,7 @@ function extractSecret(req: CronRequest): string | undefined {
   return firstValue(req.headers['x-cron-secret']) || firstValue(req.query?.secret);
 }
 
-function timingSafeSecretCompare(provided: string, expected: string): boolean {
+export function timingSafeSecretCompare(provided: string, expected: string): boolean {
   try {
     const providedBuffer = Buffer.from(provided);
     const expectedBuffer = Buffer.from(expected);
@@ -58,7 +58,7 @@ function timingSafeSecretCompare(provided: string, expected: string): boolean {
   }
 }
 
-function isQuietHour(settings: AutomationSettings, now = new Date()): boolean {
+export function isQuietHour(settings: AutomationSettings, now = new Date()): boolean {
   if (!settings.quiet_hours_enabled) {
     return false;
   }
@@ -76,7 +76,7 @@ function isQuietHour(settings: AutomationSettings, now = new Date()): boolean {
     : currentHour >= startHour && currentHour < endHour;
 }
 
-function nextQuietHourEnd(settings: AutomationSettings, now = new Date()): string {
+export function nextQuietHourEnd(settings: AutomationSettings, now = new Date()): string {
   const endHour = Number.parseInt((settings.quiet_hours_end || '08:00').split(':')[0], 10);
   const nextValid = new Date(now);
   nextValid.setHours(Number.isNaN(endHour) ? 8 : endHour, 5, 0, 0);
