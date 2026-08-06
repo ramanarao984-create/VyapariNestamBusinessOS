@@ -13,6 +13,7 @@ export interface AuthContextType {
   isLoggingIn: boolean;
   error: string | null;
   loginWithPopup: () => Promise<void>;
+  authorizeGoogleWorkspace: () => Promise<void>;
   loginWithRedirect: () => Promise<void>;
   loginWithDemoGmail: (demoEmail?: string) => void;
   logout: () => Promise<void>;
@@ -72,7 +73,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const result = await AuthService.signInWithPopup();
       setUser(normalizeAuthUser(result.user));
-      setAccessToken(result.accessToken);
+      setAccessToken(null);
     } catch (err: any) {
       if (
         err?.code === 'auth/unauthorized-domain' || 
@@ -89,7 +90,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const token = await AuthService.refreshFirebaseSession();
             if (token) {
               setUser(normalizeAuthUser(activeUser));
-              setAccessToken(token);
+              setAccessToken(null);
               setError(null);
               return;
             }
@@ -109,6 +110,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       } else {
         AuthService.log('Login', 'ERROR', 'Popup log-in exception caught inside provider.', err);
       }
+      throw err;
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const authorizeGoogleWorkspace = async () => {
+    setIsLoggingIn(true);
+    setError(null);
+    try {
+      const result = await AuthService.authorizeGoogleWorkspace();
+      setUser(normalizeAuthUser(result.user));
+      setAccessToken(result.accessToken || null);
+    } catch (err: any) {
+      const message = err.message || 'Google Workspace authorization failed.';
+      setError(message);
+      AuthService.log('Login', 'WARN', 'Workspace authorization exception caught inside provider.', err);
       throw err;
     } finally {
       setIsLoggingIn(false);
@@ -185,6 +203,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoggingIn,
         error,
         loginWithPopup,
+        authorizeGoogleWorkspace,
         loginWithRedirect,
         loginWithDemoGmail,
         logout,
