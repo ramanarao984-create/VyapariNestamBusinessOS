@@ -86,7 +86,7 @@ export function nextQuietHourEnd(settings: AutomationSettings, now = new Date())
   return nextValid.toISOString();
 }
 
-function getSupabaseAdminClient() {
+function getSupabaseAdminClient(): any {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -102,7 +102,7 @@ function getSupabaseAdminClient() {
   });
 }
 
-async function claimDueActions(supabase: ReturnType<typeof createClient>, workerId: string, batchSize: number): Promise<ScheduledAction[]> {
+async function claimDueActions(supabase: any, workerId: string, batchSize: number): Promise<ScheduledAction[]> {
   const {data, error} = await supabase.rpc('claim_due_automation_actions', {
     p_worker_id: workerId,
     p_batch_size: batchSize,
@@ -151,7 +151,7 @@ async function claimDueActions(supabase: ReturnType<typeof createClient>, worker
   return actions;
 }
 
-async function getSettings(supabase: ReturnType<typeof createClient>, tenantId: string): Promise<AutomationSettings> {
+async function getSettings(supabase: any, tenantId: string): Promise<AutomationSettings> {
   const {data} = await supabase
     .from('automation_settings')
     .select('global_kill_switch, quiet_hours_enabled, quiet_hours_start, quiet_hours_end')
@@ -166,7 +166,7 @@ async function getSettings(supabase: ReturnType<typeof createClient>, tenantId: 
   }) as AutomationSettings;
 }
 
-async function isOptedOut(supabase: ReturnType<typeof createClient>, tenantId: string, phone: string): Promise<boolean> {
+async function isOptedOut(supabase: any, tenantId: string, phone: string): Promise<boolean> {
   const {data} = await supabase
     .from('whatsapp_consents')
     .select('status')
@@ -178,7 +178,7 @@ async function isOptedOut(supabase: ReturnType<typeof createClient>, tenantId: s
 }
 
 async function updateExecution(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   executionId: string | null | undefined,
   patch: Record<string, unknown>,
 ) {
@@ -192,7 +192,7 @@ async function updateExecution(
     .eq('id', executionId);
 }
 
-async function enqueueOutboundJob(supabase: ReturnType<typeof createClient>, action: ScheduledAction): Promise<string> {
+async function enqueueOutboundJob(supabase: any, action: ScheduledAction): Promise<string> {
   const payload = action.payload || {};
   const jobId = `auto_job_${action.id}`;
   const patientName = String(payload.patientName || action.contact_name || 'Patient');
