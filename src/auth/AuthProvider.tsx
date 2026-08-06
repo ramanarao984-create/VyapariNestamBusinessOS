@@ -25,6 +25,18 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const normalizeAuthUser = (authUser: User): User => {
+  if (authUser.email) {
+    return authUser;
+  }
+
+  const providerEmail = authUser.providerData?.find((profile) => Boolean(profile.email))?.email;
+  return {
+    ...authUser,
+    email: providerEmail || `${authUser.uid}@firebase.local`,
+  } as User;
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -36,7 +48,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const unsubscribe = AuthService.subscribeToAuthChanges(
       (loggedInUser, token) => {
-        setUser(loggedInUser);
+        setUser(normalizeAuthUser(loggedInUser));
         setAccessToken(token || null);
         setIsLoggingIn(false);
         setError(null);
@@ -59,7 +71,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setError(null);
     try {
       const result = await AuthService.signInWithPopup();
-      setUser(result.user);
+      setUser(normalizeAuthUser(result.user));
       setAccessToken(result.accessToken);
     } catch (err: any) {
       if (
@@ -76,7 +88,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           try {
             const token = await AuthService.refreshFirebaseSession();
             if (token) {
-              setUser(activeUser);
+              setUser(normalizeAuthUser(activeUser));
               setAccessToken(token);
               setError(null);
               return;
