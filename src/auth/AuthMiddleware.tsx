@@ -13,18 +13,18 @@ interface MiddlewareProps {
 }
 
 /**
- * Validates whether an email address belongs to a Gmail account (@gmail.com or @googlemail.com)
+ * Validates that Firebase supplied a usable Google-authenticated email address.
  */
 export function isGmailAccount(email?: string | null): boolean {
   if (!email) return false;
   const normalized = email.toLowerCase().trim();
-  return normalized.endsWith('@gmail.com') || normalized.endsWith('@googlemail.com');
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(normalized);
 }
 
 /**
- * RequireAuth ensures a valid Google/Gmail user session exists.
+ * RequireAuth ensures a valid Google user session exists.
  * Displays a clean loading skeleton or center-positioned Google Sign-In gate screen.
- * Access to the main tool is ONLY unlocked when signed in with a valid @gmail.com account.
+ * Access to the main tool is unlocked for Google-authenticated Gmail and Workspace accounts.
  */
 export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) => {
   const { user, isLoggingIn, error } = useAuthUser();
@@ -38,7 +38,7 @@ export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) =
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
             <Sparkles className="absolute h-5 w-5 text-teal-500 animate-pulse" />
           </div>
-          <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">Verifying Google Gmail credentials...</p>
+          <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">Verifying Google credentials...</p>
         </div>
       </div>
     );
@@ -61,13 +61,13 @@ export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) =
           <div className="space-y-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800/60 rounded-full text-[11px] font-bold text-teal-800 dark:text-teal-300">
               <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-              <span>Gmail Authentication Required</span>
+              <span>Google Authentication Required</span>
             </div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Vyapari Nestam <span className="text-teal-600">CRM</span>
+              Vyapari Nestam <span className="text-teal-600">Business OS</span>
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
-              Please sign in with your <strong className="text-slate-800 dark:text-slate-200">Gmail account (@gmail.com)</strong> to open and access the business workspace tool.
+              Please sign in with your <strong className="text-slate-800 dark:text-slate-200">Google account</strong> to open and access the business workspace tool.
             </p>
           </div>
 
@@ -83,11 +83,11 @@ export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) =
                 <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15s.7 5.3 1.9 7.7l3.7-2.9z"/>
                 <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.1-6.4-5.2L1.9 16c1.8 3.7 5.6 7 10.1 7z"/>
               </svg>
-              <span>Sign in with Gmail</span>
+              <span>Sign in with Google</span>
             </button>
 
             <p className="text-[11px] text-slate-400 font-medium">
-              Requires a standard <span className="font-semibold text-slate-600 dark:text-slate-300">@gmail.com</span> Google account.
+              Supports Gmail and Google Workspace accounts.
             </p>
           </div>
 
@@ -123,7 +123,7 @@ export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) =
                       onClick={() => loginWithDemoGmail('ramanarao984@gmail.com')}
                       className="w-full flex items-center justify-center gap-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold px-3 py-2 text-xs shadow-xs transition-all cursor-pointer"
                     >
-                      <span>Continue with Demo Gmail (ramanarao984@gmail.com)</span>
+                      <span>Continue with Demo Google Account (ramanarao984@gmail.com)</span>
                     </button>
                   </div>
                 </div>
@@ -135,7 +135,7 @@ export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) =
                       Click <strong className="text-teal-600 dark:text-teal-400">"Open App in New Tab"</strong> at the top right of the preview bar.
                     </li>
                     <li>
-                      In the standalone tab, click <strong className="text-slate-800 dark:text-white">"Sign in with Gmail"</strong> again. It will authorize instantly!
+                      In the standalone tab, click <strong className="text-slate-800 dark:text-white">"Sign in with Google"</strong> again. It will authorize instantly!
                     </li>
                   </ol>
                 </div>
@@ -147,7 +147,7 @@ export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) =
     );
   }
 
-  // 2. User signed in, but NOT with a Gmail account (@gmail.com) -> Restrict Access
+  // 2. User signed in, but Firebase did not provide a usable email -> Restrict Access
   if (!isGmailAccount(user.email)) {
     return (
       <div id="non-gmail-restriction-screen" className="min-h-screen flex items-center justify-center bg-slate-100/80 dark:bg-slate-950 px-4 py-8 font-sans">
@@ -159,21 +159,21 @@ export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) =
 
           <div className="space-y-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/60 rounded-full text-[11px] font-bold text-amber-800 dark:text-amber-300">
-              <span>Gmail Account Required</span>
+              <span>Email Required</span>
             </div>
             <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-white">
               Access Restricted
             </h1>
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-medium">
-              You are signed in as <strong className="text-slate-900 dark:text-white font-bold">{user.email || 'non-gmail user'}</strong>.
-              Access to this tool is restricted strictly to valid <strong className="text-teal-600 font-bold">@gmail.com</strong> accounts.
+              You are signed in, but Google did not provide a valid email address for this session.
+              Please sign out and sign in again with a Google account that exposes a verified email.
             </p>
           </div>
 
           <div className="bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40 rounded-2xl p-4 text-xs text-amber-900 dark:text-amber-200 text-left font-medium space-y-1">
             <p className="font-bold">Why am I seeing this?</p>
             <p className="text-amber-800/90 dark:text-amber-300/80 leading-relaxed text-[11.5px]">
-              The workspace requires a standard Gmail account (@gmail.com or @googlemail.com) to synchronize with Google Sheets, Calendar, and Google Business services.
+              The workspace needs the authenticated Google email to create tenant membership, sync ownership, and protect account access.
             </p>
           </div>
 
@@ -193,7 +193,7 @@ export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) =
               <svg className="w-4 h-4 shrink-0 fill-current" viewBox="0 0 24 24">
                 <path d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.1 9 5 12 5z"/>
               </svg>
-              <span>Sign in with a Gmail Account</span>
+              <span>Sign in with Google</span>
             </button>
 
             <button
@@ -210,7 +210,7 @@ export const RequireAuth: React.FC<MiddlewareProps> = ({ children, fallback }) =
     );
   }
 
-  // 3. Authenticated with a valid Gmail account -> Render the main tool!
+  // 3. Authenticated with a valid Google account -> Render the main tool!
   return <>{children}</>;
 };
 
@@ -237,7 +237,7 @@ export const RequireGoogleAccess: React.FC<MiddlewareProps> = ({ children, fallb
           <div className="space-y-1">
             <h3 className="font-semibold text-amber-900 dark:text-amber-300">Google Workspace Authorization Required</h3>
             <p className="text-sm text-amber-700 dark:text-amber-400/80 font-medium">
-              Your Google OAuth session has expired or requires renewal. To resume live syncing of Calendar, Sheets, and business profiles, please re-authenticate with your Gmail account.
+              Your Google OAuth session has expired or requires renewal. To resume live syncing of Calendar, Sheets, and business profiles, please re-authenticate with your Google account.
             </p>
           </div>
         </div>
