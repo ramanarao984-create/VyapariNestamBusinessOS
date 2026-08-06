@@ -25,7 +25,7 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-const normalizeAuthUser = (authUser: User): User => {
+export const normalizeAuthUser = (authUser: User): User => {
   if (authUser.email) {
     return authUser;
   }
