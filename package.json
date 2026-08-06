@@ -9,7 +9,7 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "node scripts/clean.mjs",
-    "preflight": "node scripts/production-preflight.mjs",
+    "preflight": "node scripts/prod-preflight.mjs",
     "lint": "tsc --noEmit",
     "test": "vitest run"
   },
