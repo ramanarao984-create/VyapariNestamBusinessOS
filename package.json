@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
