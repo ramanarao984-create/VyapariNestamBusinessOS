@@ -355,10 +355,11 @@ export default async function handler(req: CronRequest, res: JsonResponse) {
       },
     });
   } catch (error: any) {
+    console.error('[automation] process-due failed', error);
     return res.status(500).json({
       success: false,
       code: 'AUTOMATION_PROCESSOR_FAILED',
-      error: error?.message || 'Failed to process due automation actions.',
+      error: 'Failed to process due automation actions.',
     });
   }
 }
