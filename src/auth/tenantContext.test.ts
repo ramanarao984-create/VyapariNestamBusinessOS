@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getTrustedTenantId } from './tenantContext';
+import { getTrustedTenantId } from './trustedTenant';
 
 function request(overrides: Record<string, unknown> = {}) {
   return {
