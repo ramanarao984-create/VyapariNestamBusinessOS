@@ -1,5 +1,5 @@
-import { requireAuthenticatedUser, requireProductionAccess, requireRole } from '../../src/auth/serverAuth';
-import { WhatsAppConnectionService } from '../../src/services/whatsapp/WhatsAppConnectionService';
+import { requireAuthenticatedUser, requireProductionAccess, requireRole } from '../../src/auth/serverAuth.js';
+import { WhatsAppConnectionService } from '../../src/services/whatsapp/WhatsAppConnectionService.js';
 
 async function runMiddleware(req: any, res: any, middleware: any): Promise<boolean> {
   let allowed = false;
