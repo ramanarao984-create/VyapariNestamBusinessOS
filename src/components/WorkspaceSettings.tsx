@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { User } from 'firebase/auth';
 import { authenticatedFetch } from '../auth/apiClient';
 import { 
@@ -538,7 +538,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
       localStorage.setItem('whatsapp_integration_mode', whatsappMode);
 
       if (metaPhoneNumberId) {
-        await authenticatedFetch('/api/whatsapp/connection', {
+        const response = await authenticatedFetch('/api/whatsapp/connection', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
