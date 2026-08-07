@@ -64,8 +64,45 @@ async function authenticate(req: any, res: any) {
     }
 
     const db = getDb();
-    const { data: user, error: userError } = await db.from('users').select('tenant_id, role').eq('id', account.localId).maybeSingle();
-    if (userError || !user) return authError(res, 403, 'TENANT_NOT_MAPPED', 'Authenticated user is not assigned to a tenant.');
+    let { data: user, error: userError } = await db
+      .from('users')
+      .select('tenant_id, role')
+      .eq('id', account.localId)
+      .maybeSingle();
+
+    // A fresh deployment needs one explicit workspace owner. This path is
+    // intentionally limited to the configured owner email and tenant; it
+    // cannot grant access to arbitrary Google accounts.
+    if (!user && !userError) {
+      const ownerEmail = String(process.env.WORKSPACE_OWNER_EMAIL || '').trim().toLowerCase();
+      const bootstrapTenantId = String(process.env.WORKSPACE_TENANT_ID || '').trim();
+      const accountEmail = String(account.email || '').trim().toLowerCase();
+
+      if (ownerEmail && bootstrapTenantId && accountEmail === ownerEmail) {
+        const { data: createdUser, error: createUserError } = await db
+          .from('users')
+          .upsert(
+            { id: account.localId, tenant_id: bootstrapTenantId, role: 'Owner' },
+            { onConflict: 'id' },
+          )
+          .select('tenant_id, role')
+          .maybeSingle();
+
+        if (!createUserError && createdUser) {
+          user = createdUser;
+          userError = null;
+        }
+      }
+    }
+
+    if (userError || !user) {
+      return authError(
+        res,
+        403,
+        'TENANT_NOT_MAPPED',
+        'This account has not been assigned to a workspace. Configure the first workspace owner or invite the user.',
+      );
+    }
     if (!['Owner', 'Admin'].includes(user.role)) return authError(res, 403, 'FORBIDDEN', 'Only workspace owners and admins can manage WhatsApp settings.');
     const { data: tenant, error: tenantError } = await db.from('tenants').select('id, subscription_status').eq('id', user.tenant_id).maybeSingle();
     if (tenantError || !tenant) return authError(res, 403, 'TENANT_NOT_MAPPED', 'Tenant mapping does not exist.');
