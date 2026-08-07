@@ -1,9 +1,12 @@
-/**
+/** 
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.unmock('../client');
+
 import { getSupabaseClient } from '../client';
 
 describe('Supabase Client (Lazy Initialization & Connection)', () => {

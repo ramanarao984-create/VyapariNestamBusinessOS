@@ -62,10 +62,6 @@ export class WebhookService {
     }
 
     // Fallback check if default token matches
-    if (token === WHATSAPP_CONFIG.DEFAULT_VERIFY_TOKEN || token === 'nestam_crm_secure_token') {
-      return { success: true, challenge };
-    }
-
     logger.warn('WebhookService', `Webhook handshake failed for verify token: "${token}"`);
     return { success: false, reason: 'Verification token mismatch.' };
   }
