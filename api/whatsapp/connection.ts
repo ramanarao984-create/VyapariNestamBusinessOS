@@ -35,8 +35,9 @@ function mask(value: string | null) {
   return `${value.slice(0, 4)}••••••••${value.slice(-4)}`;
 }
 
-function authError(res: any, status: number, code: string, message: string) {
-  return res.status(status).json({ error: { code, message } });
+function authError(res: any, status: number, code: string, message: string): null {
+  res.status(status).json({ error: { code, message } });
+  return null;
 }
 
 async function authenticate(req: any, res: any) {
@@ -73,35 +74,59 @@ async function authenticate(req: any, res: any) {
     // A fresh deployment needs one explicit workspace owner. This path is
     // intentionally limited to the configured owner email and tenant; it
     // cannot grant access to arbitrary Google accounts.
-    if (!user && !userError) {
+    if (userError) {
+      console.error('Workspace membership lookup failed', { code: userError.code });
+      return authError(
+        res,
+        503,
+        'MEMBERSHIP_DATABASE_UNAVAILABLE',
+        'Workspace membership storage is unavailable. Verify the Supabase URL and service-role key.',
+      );
+    }
+
+    if (!user) {
       const ownerEmail = String(process.env.WORKSPACE_OWNER_EMAIL || '').trim().toLowerCase();
       const bootstrapTenantId = String(process.env.WORKSPACE_TENANT_ID || '').trim();
       const accountEmail = String(account.email || '').trim().toLowerCase();
 
-      if (ownerEmail && bootstrapTenantId && accountEmail === ownerEmail) {
-        const { data: createdUser, error: createUserError } = await db
-          .from('users')
-          .upsert(
-            { id: account.localId, tenant_id: bootstrapTenantId, role: 'Owner' },
-            { onConflict: 'id' },
-          )
-          .select('tenant_id, role')
-          .maybeSingle();
-
-        if (!createUserError && createdUser) {
-          user = createdUser;
-          userError = null;
-        }
+      if (!ownerEmail || !bootstrapTenantId) {
+        return authError(
+          res,
+          503,
+          'WORKSPACE_BOOTSTRAP_NOT_CONFIGURED',
+          'Workspace owner setup is incomplete in Vercel. Configure WORKSPACE_OWNER_EMAIL and WORKSPACE_TENANT_ID, then redeploy.',
+        );
       }
-    }
 
-    if (userError || !user) {
-      return authError(
-        res,
-        403,
-        'TENANT_NOT_MAPPED',
-        'This account has not been assigned to a workspace. Configure the first workspace owner or invite the user.',
-      );
+      if (accountEmail !== ownerEmail) {
+        return authError(
+          res,
+          403,
+          'WORKSPACE_OWNER_EMAIL_MISMATCH',
+          'Sign in with the Google account configured as WORKSPACE_OWNER_EMAIL.',
+        );
+      }
+
+      const { data: createdUser, error: createUserError } = await db
+        .from('users')
+        .upsert(
+          { id: account.localId, tenant_id: bootstrapTenantId, role: 'Owner' },
+          { onConflict: 'id' },
+        )
+        .select('tenant_id, role')
+        .maybeSingle();
+
+      if (createUserError || !createdUser) {
+        console.error('Workspace owner bootstrap failed', { code: createUserError?.code });
+        return authError(
+          res,
+          503,
+          'WORKSPACE_BOOTSTRAP_FAILED',
+          'Workspace owner mapping could not be created. Verify the Supabase service-role key and tenant ID.',
+        );
+      }
+
+      user = createdUser;
     }
     if (!['Owner', 'Admin'].includes(user.role)) return authError(res, 403, 'FORBIDDEN', 'Only workspace owners and admins can manage WhatsApp settings.');
     const { data: tenant, error: tenantError } = await db.from('tenants').select('id, subscription_status').eq('id', user.tenant_id).maybeSingle();
