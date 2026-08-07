@@ -1,11 +1,26 @@
 async function runMiddleware(req: any, res: any, middleware: any): Promise<boolean> {
   let allowed = false;
-  await new Promise<void>((resolve) => {
-    middleware(req, res, () => {
+
+  await new Promise<void>((resolve, reject) => {
+    const next = () => {
       allowed = true;
       resolve();
-    });
+    };
+
+    try {
+      const result = middleware(req, res, next);
+      if (result && typeof result.then === 'function') {
+        result.then(() => {
+          if (!allowed) resolve();
+        }).catch(reject);
+      } else if (!allowed) {
+        resolve();
+      }
+    } catch (error) {
+      reject(error);
+    }
   });
+
   return allowed;
 }
 
