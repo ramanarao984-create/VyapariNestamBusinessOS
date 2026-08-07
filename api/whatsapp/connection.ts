@@ -1,5 +1,7 @@
-import { requireAuthenticatedUser, requireProductionAccess, requireRole } from '../../src/auth/serverAuth.js';
-import { WhatsAppConnectionService } from '../../src/services/whatsapp/WhatsAppConnectionService.js';
+// @ts-ignore Vercel bundles the TypeScript server module into this function.
+import { requireAuthenticatedUser, requireProductionAccess, requireRole } from '../../src/auth/serverAuth.ts';
+// @ts-ignore Vercel bundles the TypeScript server module into this function.
+import { WhatsAppConnectionService } from '../../src/services/whatsapp/WhatsAppConnectionService.ts';
 
 async function runMiddleware(req: any, res: any, middleware: any): Promise<boolean> {
   let allowed = false;
