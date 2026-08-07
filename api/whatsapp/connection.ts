@@ -143,9 +143,26 @@ async function authenticate(req: any, res: any) {
 async function readConnection(tenantId: string) {
   const { data, error } = await getDb().from('whatsapp_connections').select('*').eq('tenant_id', tenantId).maybeSingle();
   if (error) throw Object.assign(new Error('WhatsApp connection storage is unavailable.'), { code: error.code === 'PGRST205' ? 'WHATSAPP_SCHEMA_NOT_READY' : 'WHATSAPP_DATABASE_UNAVAILABLE' });
-  if (!data) return { isConnected: false, tenantId, phoneNumberId: null, wabaId: null, displayPhoneNumber: null, verifiedName: null, connectionStatus: 'disconnected', maskedToken: null, verifyToken: '', lastVerifiedAt: null };
+  if (!data) return {
+    isConnected: false,
+    tenantId,
+    phoneNumberId: null,
+    wabaId: null,
+    displayPhoneNumber: null,
+    verifiedName: null,
+    connectionStatus: 'disconnected',
+    hasAccessToken: false,
+    maskedToken: null,
+    hasVerifyToken: false,
+    maskedVerifyToken: null,
+    lastVerifiedAt: null,
+  };
+
   let maskedToken = null;
+  let maskedVerifyToken = null;
   try { maskedToken = data.token_ciphertext ? mask(decrypt(data.token_ciphertext)) : null; } catch { maskedToken = '••••••••'; }
+  try { maskedVerifyToken = data.verify_token ? mask(decrypt(data.verify_token)) : null; } catch { maskedVerifyToken = '••••••••'; }
+
   return {
     isConnected: data.connection_status === 'connected',
     tenantId: data.tenant_id,
@@ -154,8 +171,10 @@ async function readConnection(tenantId: string) {
     displayPhoneNumber: data.display_phone_number,
     verifiedName: data.verified_name,
     connectionStatus: data.connection_status,
+    hasAccessToken: Boolean(data.token_ciphertext),
     maskedToken,
-    verifyToken: data.verify_token || '',
+    hasVerifyToken: Boolean(data.verify_token),
+    maskedVerifyToken,
     lastVerifiedAt: data.last_verified_at,
   };
 }
@@ -178,6 +197,7 @@ export default async function handler(req: any, res: any) {
       if (existingError) throw Object.assign(new Error('WhatsApp connection storage is unavailable.'), { code: 'WHATSAPP_DATABASE_UNAVAILABLE' });
 
       const tokenCiphertext = accessToken?.trim() ? encrypt(accessToken.trim()) : (existing?.token_ciphertext || null);
+      const verifyTokenCiphertext = verifyToken?.trim() ? encrypt(verifyToken.trim()) : (existing?.verify_token || '');
       const row = {
         id: existing?.id || `conn_${identity.tenantId}_${Date.now()}`,
         tenant_id: identity.tenantId,
@@ -191,7 +211,7 @@ export default async function handler(req: any, res: any) {
         display_name_status: existing?.display_name_status || 'pending',
         token_ciphertext: tokenCiphertext,
         token_expiry_at: null,
-        verify_token: verifyToken || existing?.verify_token || '',
+        verify_token: verifyTokenCiphertext,
         connected_at: existing?.connected_at || new Date().toISOString(),
         disconnected_at: null,
         last_verified_at: new Date().toISOString(),
