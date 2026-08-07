@@ -567,10 +567,24 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
         }
       }
       
-      // 4. Trigger Sync Settings with Google Sheets if linked
-      await onSyncSettings();
-      
-      setSaveSuccess('Workspace Settings successfully stored in offline local storage & synced!');
+      // 4. Sync Google Sheets separately from the secure WhatsApp save.
+      // A missing tenant membership must not make a successfully stored WhatsApp
+      // connection appear to have failed.
+      let syncWarning: string | null = null;
+      try {
+        await onSyncSettings();
+      } catch (syncErr: any) {
+        syncWarning = syncErr?.message || 'Google Sheets sync is waiting for tenant setup.';
+      }
+
+      setSaveSuccess(
+        syncWarning
+          ? 'WhatsApp settings saved securely. Google Sheets sync is waiting for tenant setup.'
+          : 'Workspace Settings successfully stored and synced!'
+      );
+      if (syncWarning) {
+        setSaveError(null);
+      }
       
       // Auto fade out success message
       setTimeout(() => {
