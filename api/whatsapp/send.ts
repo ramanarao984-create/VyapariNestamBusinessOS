@@ -1,5 +1,5 @@
-import { requireAuthenticatedUser, requireRole } from '../../src/auth/serverAuth';
-import { OutboundService } from '../../src/services/whatsapp/OutboundService';
+import { requireAuthenticatedUser, requireRole } from '../../src/auth/serverAuth.js';
+import { OutboundService } from '../../src/services/whatsapp/OutboundService.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
