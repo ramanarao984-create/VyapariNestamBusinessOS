@@ -163,9 +163,22 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
   // Restore non-secret WhatsApp connection metadata after a page refresh.
   useEffect(() => {
     let cancelled = false;
+    const restoreLocalMetadata = () => {
+      if (cancelled) return;
+      const phoneNumberId = localStorage.getItem('whatsapp_meta_phone_number_id');
+      const wabaId = localStorage.getItem('whatsapp_meta_waba_id');
+      const verifyToken = localStorage.getItem('whatsapp_meta_verify_token');
+      if (phoneNumberId) onMetaPhoneNumberIdChange(phoneNumberId);
+      if (wabaId) onMetaWabaIdChange(wabaId);
+      if (verifyToken) onMetaVerifyTokenChange(verifyToken);
+    };
+
     authenticatedFetch('/api/whatsapp/connection')
       .then(async (response) => {
-        if (!response.ok) return;
+        if (!response.ok) {
+          restoreLocalMetadata();
+          return;
+        }
         const connection = await response.json();
         if (cancelled || !connection) return;
         if (connection.phoneNumberId) onMetaPhoneNumberIdChange(connection.phoneNumberId);
@@ -174,7 +187,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
         if (connection.maskedToken) setHasStoredWhatsAppToken(true);
         if (connection.isConnected) onWhatsappModeChange('meta');
       })
-      .catch(() => undefined);
+      .catch(restoreLocalMetadata);
     return () => { cancelled = true; };
   }, []);
   
@@ -536,6 +549,9 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
       
       // 3. Save WhatsApp API state parameters to server encrypted vault
       localStorage.setItem('whatsapp_integration_mode', whatsappMode);
+      localStorage.setItem('whatsapp_meta_phone_number_id', metaPhoneNumberId);
+      localStorage.setItem('whatsapp_meta_waba_id', metaWabaId);
+      localStorage.setItem('whatsapp_meta_verify_token', metaVerifyToken);
 
       if (metaPhoneNumberId) {
         const response = await authenticatedFetch('/api/whatsapp/connection', {
