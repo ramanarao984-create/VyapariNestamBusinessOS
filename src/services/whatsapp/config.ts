@@ -20,12 +20,12 @@ export const WHATSAPP_CONFIG = {
   /**
    * Default verify token fallback for development/handshake verification
    */
-  DEFAULT_VERIFY_TOKEN: process.env.META_VERIFY_TOKEN || 'nestam_crm_secure_webhook_token',
+  DEFAULT_VERIFY_TOKEN: process.env.META_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || '',
 
   /**
    * Meta App Secret for x-hub-signature-256 HMAC validation
    */
-  META_APP_SECRET: process.env.META_APP_SECRET || '',
+  META_APP_SECRET: process.env.META_APP_SECRET || process.env.WHATSAPP_APP_SECRET || '',
 
   /**
    * Maximum outbound send attempt retries for transient errors
