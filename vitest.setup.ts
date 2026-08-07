@@ -45,7 +45,7 @@ const testSupabaseClient = {
   rpc: vi.fn(async () => ({ data: null, error: null })),
 };
 
-vi.mock('../src/supabase/client', () => ({
+vi.mock('./src/supabase/client', () => ({
   isSupabaseConfigured: () => true,
   getSupabaseClient: () => testSupabaseClient,
 }));
