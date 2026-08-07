@@ -31,7 +31,7 @@ import { requireAuthenticatedUser, requireRole, requirePermission, requireProduc
 import { SectorConfigService } from "./src/services/sector/SectorConfigService";
 import { APPROVED_MEDICAL_SECTOR_IDS, IndustryType, isApprovedSectorId } from "./src/industryConfig";
 import { DurableAutomationEngine } from "./src/services/automation/DurableAutomationEngine";
-import { getTrustedTenantId } from "./src/auth/tenantContext";
+import { getTrustedTenantId } from "./src/auth/trustedTenant";
 import crypto from 'crypto';
 
 function timingSafeSecretCompare(provided: string, expected: string): boolean {
