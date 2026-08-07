@@ -159,6 +159,8 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [hasStoredWhatsAppToken, setHasStoredWhatsAppToken] = useState(false);
+  const [storedWhatsAppTokenMask, setStoredWhatsAppTokenMask] = useState<string | null>(null);
+  const [storedVerifyTokenMask, setStoredVerifyTokenMask] = useState<string | null>(null);
 
   // Restore non-secret WhatsApp connection metadata after a page refresh.
   useEffect(() => {
@@ -181,8 +183,13 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
         if (cancelled || !connection) return;
         if (connection.phoneNumberId) onMetaPhoneNumberIdChange(connection.phoneNumberId);
         if (connection.wabaId) onMetaWabaIdChange(connection.wabaId);
-        if (connection.verifyToken) onMetaVerifyTokenChange(connection.verifyToken);
-        if (connection.maskedToken) setHasStoredWhatsAppToken(true);
+        if (connection.maskedToken) {
+          setHasStoredWhatsAppToken(true);
+          setStoredWhatsAppTokenMask(connection.maskedToken);
+        }
+        if (connection.maskedVerifyToken) {
+          setStoredVerifyTokenMask(connection.maskedVerifyToken);
+        }
         if (connection.isConnected) onWhatsappModeChange('meta');
       })
       .catch(restoreLocalMetadata);
@@ -561,10 +568,25 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
             verifyToken: metaVerifyToken,
           }),
         });
+        const responseBody = await response.json().catch(() => ({}));
         if (!response.ok) {
-          const errorBody = await response.json().catch(() => ({}));
-          throw new Error(errorBody.error?.message || errorBody.error || 'WhatsApp connection could not be saved.');
+          throw new Error(responseBody.error?.message || responseBody.error || 'WhatsApp connection could not be saved.');
         }
+
+        const savedConnection = responseBody.connection;
+        if (savedConnection?.maskedToken) {
+          setHasStoredWhatsAppToken(true);
+          setStoredWhatsAppTokenMask(savedConnection.maskedToken);
+        }
+        if (savedConnection?.maskedVerifyToken) {
+          setStoredVerifyTokenMask(savedConnection.maskedVerifyToken);
+        }
+
+        // Remove plaintext credentials from browser memory after the encrypted
+        // server vault confirms persistence.
+        onMetaAccessTokenChange('');
+        onMetaVerifyTokenChange('');
+        setShowToken(false);
       }
       
       // 4. Sync Google Sheets separately from the secure WhatsApp save.
@@ -1200,11 +1222,13 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                         type="text"
                         value={metaVerifyToken}
                         onChange={(e) => onMetaVerifyTokenChange(e.target.value)}
-                        placeholder="e.g. nestam_crm_secure_token"
+                        placeholder={storedVerifyTokenMask ? 'Stored securely on server (enter only to replace)' : 'e.g. nestam_crm_secure_token'}
                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs focus:outline-none text-slate-700 font-mono transition-colors"
                       />
                       <p className="text-[9px] text-slate-400 mt-1">
-                        Use this value when setting up the webhook in your Meta App Dashboard.
+                        {storedVerifyTokenMask
+                          ? `Saved securely: ${storedVerifyTokenMask}. Enter a new value only to replace it.`
+                          : 'Use this value when setting up the webhook in your Meta App Dashboard.'}
                       </p>
                     </div>
 
@@ -1230,7 +1254,9 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                         />
                       </div>
                       <p className="text-[9px] text-slate-400 mt-1">
-                        Your permanent access token is encrypted in local transmission and masked as password inputs for top tier credentials safety.
+                        {storedWhatsAppTokenMask
+                          ? `Saved securely: ${storedWhatsAppTokenMask}. The full token is never returned to the browser; enter a new value only to replace it.`
+                          : 'The permanent access token is encrypted server-side and is never stored in browser storage.'}
                       </p>
                     </div>
                   </div>
