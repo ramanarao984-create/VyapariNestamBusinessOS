@@ -1,13 +1,18 @@
 // @ts-nocheck
-import { defineConfig, mergeConfig } from 'vitest/config';
-import viteConfig from './vite.config';
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+import { defineConfig } from 'vitest/config';
 
-export default mergeConfig(
-  viteConfig,
-  defineConfig({
-    test: {
-      setupFiles: ['./vitest.setup.ts'],
-      environment: 'node',
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '.'),
     },
-  }),
-);
+  },
+  test: {
+    setupFiles: ['./vitest.setup.ts'],
+    environment: 'node',
+  },
+});
