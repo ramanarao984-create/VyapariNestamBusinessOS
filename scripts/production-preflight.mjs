@@ -62,7 +62,7 @@ async function walk(directory) {
 const sourceFiles = await walk(path.join(root, 'src')).catch(() => []);
 for (const file of sourceFiles) {
   const source = await readFile(file, 'utf8');
-  if (/localStorage\\.(setItem|removeItem)\\s*\\(\\s*['"][^'"]*(token|access|secret)/i.test(source)) {
+  if (/localStorage\.(setItem|removeItem)\\s*\\(\\s*['"][^'"]*(token|access|secret)/i.test(source)) {
     fail(`possible sensitive browser storage write in ${path.relative(root, file)}`);
   }
 }
