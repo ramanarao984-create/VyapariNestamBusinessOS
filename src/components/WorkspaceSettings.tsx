@@ -380,7 +380,6 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tenantId: 'tenant_default',
           recipient: metaTestPhone,
           message: metaTestMessage
         }),
