@@ -594,10 +594,10 @@ export default function App() {
   const [whatsappMode, setWhatsappMode] = useState<'simulated' | 'meta'>(() => {
     return (localStorage.getItem('whatsapp_integration_mode') as 'simulated' | 'meta') || 'meta';
   });
-  const [metaPhoneNumberId, setMetaPhoneNumberId] = useState(() => localStorage.getItem('meta_whatsapp_phone_number_id') || '');
-  const [metaAccessToken, setMetaAccessToken] = useState(() => localStorage.getItem('meta_whatsapp_access_token') || '');
-  const [metaWabaId, setMetaWabaId] = useState(() => localStorage.getItem('meta_whatsapp_waba_id') || '');
-  const [metaVerifyToken, setMetaVerifyToken] = useState(() => localStorage.getItem('meta_whatsapp_verify_token') || 'nestam_crm_secure_token');
+  const [metaPhoneNumberId, setMetaPhoneNumberId] = useState('');
+  const [metaAccessToken, setMetaAccessToken] = useState('');
+  const [metaWabaId, setMetaWabaId] = useState('');
+  const [metaVerifyToken, setMetaVerifyToken] = useState('nestam_crm_secure_token');
 
   // Lifted AI Agent configurations
   const [aiAgentActive, setAiAgentActive] = useState<boolean>(() => {
@@ -609,9 +609,7 @@ export default function App() {
   const [customSystemPrompt, setCustomSystemPrompt] = useState<string>(() => {
     return localStorage.getItem('nestam_ai_custom_system_prompt') || '';
   });
-  const [customApiKey, setCustomApiKey] = useState<string>(() => {
-    return localStorage.getItem('nestam_ai_custom_api_key') || '';
-  });
+  const [customApiKey, setCustomApiKey] = useState<string>('');
 
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>(() => {
     return (localStorage.getItem('whatsapp_connection_status') as 'disconnected' | 'connecting' | 'connected') || 'disconnected';
@@ -632,22 +630,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('whatsapp_integration_mode', whatsappMode);
   }, [whatsappMode]);
-
-  useEffect(() => {
-    localStorage.setItem('meta_whatsapp_phone_number_id', metaPhoneNumberId);
-  }, [metaPhoneNumberId]);
-
-  useEffect(() => {
-    localStorage.setItem('meta_whatsapp_access_token', metaAccessToken);
-  }, [metaAccessToken]);
-
-  useEffect(() => {
-    localStorage.setItem('meta_whatsapp_waba_id', metaWabaId);
-  }, [metaWabaId]);
-
-  useEffect(() => {
-    localStorage.setItem('meta_whatsapp_verify_token', metaVerifyToken);
-  }, [metaVerifyToken]);
 
   useEffect(() => {
     localStorage.setItem('whatsapp_connection_status', connectionStatus);
@@ -676,10 +658,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('nestam_ai_custom_system_prompt', customSystemPrompt);
   }, [customSystemPrompt]);
-
-  useEffect(() => {
-    localStorage.setItem('nestam_ai_custom_api_key', customApiKey);
-  }, [customApiKey]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1344,10 +1322,6 @@ export default function App() {
       await saveInteractionsToSheet(accessToken, result.id, interactions);
       await saveKnowledgeBaseToSheet(accessToken, result.id, aiKnowledgeBase, selectedIndustry, {
         whatsappMode,
-        metaPhoneNumberId,
-        metaAccessToken,
-        metaWabaId,
-        metaVerifyToken,
         connectionStatus,
         deviceDetails: deviceDetails ? JSON.stringify(deviceDetails) : '',
       });
@@ -1480,8 +1454,7 @@ export default function App() {
         const sheetKb = await fetchKnowledgeBaseFromSheet(token, sheetId);
         if (sheetKb && (
           sheetKb.timings || sheetKb.treatments || sheetKb.doctors || sheetKb.reviews || sheetKb.workflow ||
-          sheetKb.whatsappMode || sheetKb.metaPhoneNumberId || sheetKb.metaAccessToken || sheetKb.metaWabaId ||
-          sheetKb.metaVerifyToken || sheetKb.connectionStatus || sheetKb.deviceDetails
+          sheetKb.whatsappMode || sheetKb.connectionStatus || sheetKb.deviceDetails
         )) {
           const parsedKb = {
             timings: sheetKb.timings || aiKnowledgeBase.timings,
@@ -1497,22 +1470,6 @@ export default function App() {
           if (sheetKb.whatsappMode) {
             setWhatsappMode(sheetKb.whatsappMode as any);
             localStorage.setItem('whatsapp_integration_mode', sheetKb.whatsappMode);
-          }
-          if (sheetKb.metaPhoneNumberId) {
-            setMetaPhoneNumberId(sheetKb.metaPhoneNumberId);
-            localStorage.setItem('meta_whatsapp_phone_number_id', sheetKb.metaPhoneNumberId);
-          }
-          if (sheetKb.metaAccessToken) {
-            setMetaAccessToken(sheetKb.metaAccessToken);
-            localStorage.setItem('meta_whatsapp_access_token', sheetKb.metaAccessToken);
-          }
-          if (sheetKb.metaWabaId) {
-            setMetaWabaId(sheetKb.metaWabaId);
-            localStorage.setItem('meta_whatsapp_waba_id', sheetKb.metaWabaId);
-          }
-          if (sheetKb.metaVerifyToken) {
-            setMetaVerifyToken(sheetKb.metaVerifyToken);
-            localStorage.setItem('meta_whatsapp_verify_token', sheetKb.metaVerifyToken);
           }
           if (sheetKb.connectionStatus) {
             setConnectionStatus(sheetKb.connectionStatus as any);
@@ -1537,10 +1494,6 @@ export default function App() {
           // If sheet is empty, push local knowledge base and configuration settings
           await saveKnowledgeBaseToSheet(token, sheetId, aiKnowledgeBase, selectedIndustry, {
             whatsappMode,
-            metaPhoneNumberId,
-            metaAccessToken,
-            metaWabaId,
-            metaVerifyToken,
             connectionStatus,
             deviceDetails: deviceDetails ? JSON.stringify(deviceDetails) : '',
           });
