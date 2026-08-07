@@ -1,3 +1,6 @@
+import { requireAuthenticatedUser, requireRole } from '../../src/auth/serverAuth';
+import { OutboundService } from '../../src/services/whatsapp/OutboundService';
+
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -5,8 +8,6 @@ export default async function handler(req: any, res: any) {
   }
 
   let authenticated = false;
-  const { requireAuthenticatedUser, requireRole } = await import("../../src/auth/serverAuth");
-
   await new Promise<void>((resolve) => {
     requireAuthenticatedUser(req, res, () => {
       authenticated = true;
@@ -33,7 +34,6 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const { OutboundService } = await import("../../src/services/whatsapp/OutboundService");
     const result = await OutboundService.sendMessage({
       tenantId: req.auth.tenantId,
       recipientPhone: recipient,

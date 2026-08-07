@@ -1,3 +1,6 @@
+import { requireAuthenticatedUser, requireProductionAccess, requireRole } from '../../src/auth/serverAuth';
+import { WhatsAppConnectionService } from '../../src/services/whatsapp/WhatsAppConnectionService';
+
 async function runMiddleware(req: any, res: any, middleware: any): Promise<boolean> {
   let allowed = false;
 
@@ -34,15 +37,10 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  const { requireAuthenticatedUser, requireProductionAccess, requireRole } =
-    await import("../../src/auth/serverAuth");
-
   if (!(await runMiddleware(req, res, requireAuthenticatedUser))) return;
   if (!(await runMiddleware(req, res, requireProductionAccess))) return;
   if (!(await runMiddleware(req, res, requireRole("Owner", "Admin")))) return;
 
-  const { WhatsAppConnectionService } =
-    await import("../../src/services/whatsapp/WhatsAppConnectionService");
   const tenantId = req.auth.tenantId;
 
   try {
