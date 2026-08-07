@@ -1,5 +1,7 @@
-import { requireAuthenticatedUser, requireRole } from '../../src/auth/serverAuth.js';
-import { OutboundService } from '../../src/services/whatsapp/OutboundService.js';
+// @ts-ignore Vercel bundles the TypeScript server module into this function.
+import { requireAuthenticatedUser, requireRole } from '../../src/auth/serverAuth.ts';
+// @ts-ignore Vercel bundles the TypeScript server module into this function.
+import { OutboundService } from '../../src/services/whatsapp/OutboundService.ts';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
