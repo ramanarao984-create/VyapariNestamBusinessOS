@@ -158,6 +158,25 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
+  const [hasStoredWhatsAppToken, setHasStoredWhatsAppToken] = useState(false);
+
+  // Restore non-secret WhatsApp connection metadata after a page refresh.
+  useEffect(() => {
+    let cancelled = false;
+    authenticatedFetch('/api/whatsapp/connection')
+      .then(async (response) => {
+        if (!response.ok) return;
+        const connection = await response.json();
+        if (cancelled || !connection) return;
+        if (connection.phoneNumberId) onMetaPhoneNumberIdChange(connection.phoneNumberId);
+        if (connection.wabaId) onMetaWabaIdChange(connection.wabaId);
+        if (connection.verifyToken) onMetaVerifyTokenChange(connection.verifyToken);
+        if (connection.maskedToken) setHasStoredWhatsAppToken(true);
+        if (connection.isConnected) onWhatsappModeChange('meta');
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   
   // Section 1 extra local states (loaded/saved to localStorage inside this component)
   const [businessEmail, setBusinessEmail] = useState(() => localStorage.getItem('nestam_business_email') || '');
@@ -523,13 +542,16 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            tenantId: 'tenant_default',
             phoneNumberId: metaPhoneNumberId,
             accessToken: metaAccessToken,
             wabaId: metaWabaId,
             verifyToken: metaVerifyToken,
           }),
         });
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody.error?.message || errorBody.error || 'WhatsApp connection could not be saved.');
+        }
       }
       
       // 4. Trigger Sync Settings with Google Sheets if linked
@@ -1176,7 +1198,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                           type={showToken ? 'text' : 'password'}
                           value={metaAccessToken}
                           onChange={(e) => onMetaAccessTokenChange(e.target.value)}
-                          placeholder="e.g. EAAGhK8... (Your long-lived system user permanent access token)"
+                          placeholder={hasStoredWhatsAppToken ? 'Stored securely on server (enter only to replace)' : 'e.g. EAAGhK8... (server-stored token)'}
                           className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs focus:outline-none text-slate-700 font-mono transition-colors"
                         />
                       </div>
