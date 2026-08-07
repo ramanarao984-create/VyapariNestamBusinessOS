@@ -518,9 +518,6 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
       
       // 3. Save WhatsApp API state parameters to server encrypted vault
       localStorage.setItem('whatsapp_integration_mode', whatsappMode);
-      localStorage.setItem('meta_whatsapp_phone_number_id', metaPhoneNumberId);
-      localStorage.setItem('meta_whatsapp_waba_id', metaWabaId);
-      localStorage.setItem('meta_whatsapp_verify_token', metaVerifyToken);
 
       if (metaPhoneNumberId) {
         await authenticatedFetch('/api/whatsapp/connection', {
