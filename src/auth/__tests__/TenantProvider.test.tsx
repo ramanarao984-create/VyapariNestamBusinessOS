@@ -68,6 +68,7 @@ describe('TenantProvider React Integration', () => {
       loginWithDemoGmail: vi.fn(),
       logout: vi.fn(),
       refreshSession: vi.fn(),
+      authorizeGoogleWorkspace: vi.fn(),
     });
 
     // Act
@@ -96,6 +97,7 @@ describe('TenantProvider React Integration', () => {
       loginWithDemoGmail: vi.fn(),
       logout: vi.fn(),
       refreshSession: vi.fn(),
+      authorizeGoogleWorkspace: vi.fn(),
     });
 
     // Act
@@ -125,6 +127,7 @@ describe('TenantProvider React Integration', () => {
       loginWithDemoGmail: vi.fn(),
       logout: vi.fn(),
       refreshSession: vi.fn(),
+      authorizeGoogleWorkspace: vi.fn(),
     });
 
     const mockResolvedContext = {
@@ -196,6 +199,7 @@ describe('TenantProvider React Integration', () => {
       loginWithDemoGmail: vi.fn(),
       logout: vi.fn(),
       refreshSession: vi.fn(),
+      authorizeGoogleWorkspace: vi.fn(),
     });
 
     let rejectPromise: Promise<any>;
@@ -237,6 +241,7 @@ describe('TenantProvider React Integration', () => {
       loginWithDemoGmail: vi.fn(),
       logout: vi.fn(),
       refreshSession: vi.fn(),
+      authorizeGoogleWorkspace: vi.fn(),
     });
 
     const mockResolvedContext = {
