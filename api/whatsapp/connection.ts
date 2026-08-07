@@ -1,22 +1,5 @@
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { cert, getApps, getApp, initializeApp } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-
-let adminAuth: ReturnType<typeof getAuth> | null = null;
-
-function getServerAuth() {
-  if (adminAuth) return adminAuth;
-  const app = getApps()[0] || initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\\n'),
-    }),
-  });
-  adminAuth = getAuth(app);
-  return adminAuth;
-}
 
 function getDb() {
   const url = process.env.SUPABASE_URL;
@@ -65,9 +48,23 @@ async function authenticate(req: any, res: any) {
 
   const token = header.slice(7).trim();
   try {
-    const decoded = await getServerAuth().verifyIdToken(token);
+    const firebaseApiKey = process.env.FIREBASE_WEB_API_KEY || 'AIzaSyCaNUS0QlroJGEJw_3QcUs66r1VSMw78RM';
+    const firebaseResponse = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(firebaseApiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: token }),
+      },
+    );
+    const firebasePayload = await firebaseResponse.json();
+    const account = firebasePayload.users?.[0];
+    if (!firebaseResponse.ok || !account?.localId) {
+      return authError(res, 401, 'UNAUTHENTICATED', 'Invalid or expired Firebase authentication token.');
+    }
+
     const db = getDb();
-    const { data: user, error: userError } = await db.from('users').select('tenant_id, role').eq('id', decoded.uid).maybeSingle();
+    const { data: user, error: userError } = await db.from('users').select('tenant_id, role').eq('id', account.localId).maybeSingle();
     if (userError || !user) return authError(res, 403, 'TENANT_NOT_MAPPED', 'Authenticated user is not assigned to a tenant.');
     if (!['Owner', 'Admin'].includes(user.role)) return authError(res, 403, 'FORBIDDEN', 'Only workspace owners and admins can manage WhatsApp settings.');
     const { data: tenant, error: tenantError } = await db.from('tenants').select('id, subscription_status').eq('id', user.tenant_id).maybeSingle();
@@ -75,7 +72,7 @@ async function authenticate(req: any, res: any) {
     if (!['active', 'trial', 'active_trial'].includes(String(tenant.subscription_status || '').toLowerCase())) {
       return authError(res, 403, 'TENANT_INACTIVE', 'Tenant account is not active.');
     }
-    return { uid: decoded.uid, tenantId: tenant.id };
+    return { uid: account.localId, tenantId: tenant.id };
   } catch {
     return authError(res, 401, 'UNAUTHENTICATED', 'Invalid or expired Firebase authentication token.');
   }
