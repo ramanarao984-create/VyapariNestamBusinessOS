@@ -25,8 +25,8 @@ for (const relativePath of requiredFiles) {
 
 const envExample = await readFile(path.join(root, '.env.example'), 'utf8').catch(() => '');
 for (const key of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'CRON_SECRET', 'ENCRYPTION_SECRET']) {
-  if (!new RegExp(`^\\s*${key}=\\s*\`, 'm').test(envExample)) {
-    fail(`.env.example is missing ${key}`);
+  if (!envExample.split(/\r?\n/).some((line) => line.trimStart().startsWith(key + '='))) {
+    fail('.env.example is missing ' + key);
   }
 }
 
