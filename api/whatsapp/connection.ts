@@ -25,6 +25,15 @@ async function runMiddleware(req: any, res: any, middleware: any): Promise<boole
 }
 
 export default async function handler(req: any, res: any) {
+  if (!req.headers?.authorization || !String(req.headers.authorization).startsWith('Bearer ')) {
+    return res.status(401).json({
+      error: {
+        code: 'UNAUTHENTICATED',
+        message: 'Missing or invalid Authorization header.',
+      },
+    });
+  }
+
   const { requireAuthenticatedUser, requireProductionAccess, requireRole } =
     await import("../../src/auth/serverAuth");
 
