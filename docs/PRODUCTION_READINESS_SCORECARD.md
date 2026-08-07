@@ -4,7 +4,7 @@ Last updated: 2026-08-07
 
 ## Current Score
 
-Estimated readiness: **81 / 100**
+Estimated readiness: **72 / 100**
 
 This score assumes the latest GitHub `main` branch is deployed to Vercel and required production environment variables are present. It is not a launch approval until live auth, database, WhatsApp webhook, AI, and automation paths pass end-to-end verification.
 
@@ -13,10 +13,10 @@ This score assumes the latest GitHub `main` branch is deployed to Vercel and req
 | Area | Score | Status | Notes |
 | --- | ---: | --- | --- |
 | Deployment | 7/10 | Improving | Vercel builds are passing. Real `api/` functions exist for health and automation cron. Remaining work: full API route coverage or Express refactor; resolve Vercel TypeScript warnings. |
-| Security | 7/10 | Improving | Browser-side Meta token persistence removed, Google OAuth scope posture documented, security headers added, cron auth supports Vercel Bearer secrets. Remaining work: CSP, rate limiting, secret rotation runbook, live security scan; confirm health fails closed in production. |
+| Security | 4/10 | Blocked by live finding | Browser-side Meta token persistence removed, Google OAuth scope posture documented, security headers added, cron auth supports Vercel Bearer secrets. Remaining work: CSP, rate limiting, secret rotation runbook, live security scan; confirm health fails closed in production. |
 | Auth & Identity | 7/10 | Improving | Firebase Google sign-in now supports Gmail and Workspace identities, with Workspace API authorization separated from login. Remaining work: verify Google consent screen publishing/scopes and user onboarding edge cases. |
-| Multi-Tenant Isolation | 7/10 | Needs Live DB Proof | SQL migrations generally enable RLS for tenant-facing tables. Migration policy tests now guard RLS and unsafe grants. Remaining work: live Supabase project must be active and inspected for applied migrations/policies. |
-| Schema Readiness | 7/10 | Needs Live DB Proof | Migrations cover WhatsApp, Google vault, tenant sector config, automation, audit metadata. Remaining work: check live drift, indexes, constraints, and backup/restore posture. |
+| Multi-Tenant Isolation | 3/10 | Critical live finding | The live project is active, but four public legacy tables have RLS disabled and one automation table has RLS enabled without policies. No matching policies were found for the affected tables. This is a launch blocker until ownership policies or intentional non-exposure are applied. |
+| Schema Readiness | 5/10 | Live drift found | Live migration history is empty even though the database contains a large schema, indicating schema drift or an unmanaged legacy database. RLS, policy, and migration provenance must be reconciled before launch. |
 | BYOS / BYO Storage | 5/10 | Early | Current architecture is mostly app-managed storage with Supabase/Firebase. Remaining work: tenant-scoped integration abstraction, per-tenant external storage credentials, export/delete flows. |
 | WhatsApp Runtime | 7/10 | Improving | Persistence, consent, conversation window, handover, outbound jobs, and a Vercel-safe automation cron worker exist. Remaining work: live webhook verification, Meta app production review, rate limits, replay tests. |
 | AI Agent | 7/10 | Improving | AI safety utilities now cover prompt-injection detection, PII redaction, and prompt size checks. Remaining work: wire guardrails into live AI endpoints, per-tenant usage caps, eval suite, model/provider failure policies. |
@@ -27,7 +27,7 @@ This score assumes the latest GitHub `main` branch is deployed to Vercel and req
 
 ## Blockers To Reach 90/100
 
-1. Activate/connect the correct Supabase production project and verify live migrations, RLS, policies, and backups.
+1. Apply an approved fail-closed policy/remediation plan for public.shops, public.products, public.transactions, public.udhari, and automation_pending_executions.
 2. Refactor backend/API deployment so every `/api/*` route needed by the app is available as Vercel Functions, not only health and automation cron.
 3. Run live cron smoke tests after Supabase is active: due action claim, consent block, quiet-hours reschedule, outbound job enqueue.
 4. Add end-to-end deployment tests for Google sign-in, Workspace authorization, WhatsApp webhook verification, reminder cron, and AI chat.
@@ -57,3 +57,4 @@ This score assumes the latest GitHub `main` branch is deployed to Vercel and req
 - Added production preflight checks to CI and made the health endpoint fail closed when critical runtime configuration is missing.
 - Removed internal cron/database error details from HTTP error responses and resolved cron Supabase client type-check errors.
 - Split frontend vendor bundles; latest Vercel build reduced the main JavaScript chunk from approximately 1.48 MB to 741 KB.
+- Restored the correct Supabase project and completed the first live security/schema audit; the audit found critical RLS exposure and empty migration history.
