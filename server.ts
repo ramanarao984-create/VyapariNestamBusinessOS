@@ -31,6 +31,7 @@ import { requireAuthenticatedUser, requireRole, requirePermission, requireProduc
 import { SectorConfigService } from "./src/services/sector/SectorConfigService";
 import { APPROVED_MEDICAL_SECTOR_IDS, IndustryType, isApprovedSectorId } from "./src/industryConfig";
 import { DurableAutomationEngine } from "./src/services/automation/DurableAutomationEngine";
+import { getTrustedTenantId } from "./src/auth/tenantContext";
 import crypto from 'crypto';
 
 function timingSafeSecretCompare(provided: string, expected: string): boolean {
@@ -171,7 +172,7 @@ const requireImplementationAdmin = (req: any, res: any, next: any) => {
 // 1. Get current tenant sector config and version history
 app.get("/api/tenant/sector-config", requireAuthenticatedUser, async (req: any, res: any) => {
   try {
-    const tenantId = req.auth?.tenantId || req.query.tenantId || 'demo-tenant-id';
+    const tenantId = getTrustedTenantId(req);
     const config = await SectorConfigService.getTenantSectorConfig(tenantId);
     const history = await SectorConfigService.getSectorHistory(tenantId);
     return res.status(200).json({ config, history });
@@ -183,7 +184,7 @@ app.get("/api/tenant/sector-config", requireAuthenticatedUser, async (req: any, 
 // 2. Generate impact preview before changing sector
 app.post("/api/tenant/sector-config/preview", requireAuthenticatedUser, async (req: any, res: any) => {
   try {
-    const tenantId = req.auth?.tenantId || req.body.tenantId || 'demo-tenant-id';
+    const tenantId = getTrustedTenantId(req);
     const { targetSectorId } = req.body;
     if (!targetSectorId || !isApprovedSectorId(targetSectorId)) {
       return res.status(400).json({
@@ -205,7 +206,7 @@ app.post("/api/tenant/sector-config/preview", requireAuthenticatedUser, async (r
 // 3. Apply sector config change transactionally with versioning
 app.post("/api/tenant/sector-config/apply", requireAuthenticatedUser, requireImplementationAdmin, async (req: any, res: any) => {
   try {
-    const tenantId = req.auth?.tenantId || req.body.tenantId || 'demo-tenant-id';
+    const tenantId = getTrustedTenantId(req);
     const { targetSectorId, typedConfirmation, strategy } = req.body;
     const changedBy = req.auth?.email || req.auth?.uid || 'admin@nestam.com';
 
@@ -245,7 +246,7 @@ app.post("/api/tenant/sector-config/apply", requireAuthenticatedUser, requireImp
 // 4. Rollback sector config to a previous version
 app.post("/api/tenant/sector-config/rollback", requireAuthenticatedUser, requireImplementationAdmin, async (req: any, res: any) => {
   try {
-    const tenantId = req.auth?.tenantId || req.body.tenantId || 'demo-tenant-id';
+    const tenantId = getTrustedTenantId(req);
     const { targetVersion, typedConfirmation } = req.body;
     const changedBy = req.auth?.email || req.auth?.uid || 'admin@nestam.com';
 
@@ -276,7 +277,7 @@ app.post("/api/tenant/sector-config/rollback", requireAuthenticatedUser, require
 // 5. Calculate readiness checklist for mandatory activation gate
 app.get("/api/tenant/readiness-check", requireAuthenticatedUser, async (req: any, res: any) => {
   try {
-    const tenantId = req.auth?.tenantId || req.query.tenantId || 'demo-tenant-id';
+    const tenantId = getTrustedTenantId(req);
     const hasMetaConnected = req.query.hasMetaConnected === 'true' || Boolean(process.env.META_WA_PHONE_NUMBER_ID);
     const hasGoogleConnected = req.query.hasGoogleConnected === 'true' || Boolean(process.env.GOOGLE_CLIENT_ID);
     const hasCalendarTested = req.query.hasCalendarTested === 'true' || req.auth?.isDemo;
@@ -300,7 +301,7 @@ app.get("/api/tenant/readiness-check", requireAuthenticatedUser, async (req: any
 // 6. Activate workspace - fails closed if any blocking check fails
 app.post("/api/tenant/activate", requireAuthenticatedUser, requireImplementationAdmin, async (req: any, res: any) => {
   try {
-    const tenantId = req.auth?.tenantId || req.body.tenantId || 'demo-tenant-id';
+    const tenantId = getTrustedTenantId(req);
     const activatedBy = req.auth?.email || req.auth?.uid || 'admin@nestam.com';
 
     const hasMetaConnected = req.body.hasMetaConnected === true || Boolean(process.env.META_WA_PHONE_NUMBER_ID);
