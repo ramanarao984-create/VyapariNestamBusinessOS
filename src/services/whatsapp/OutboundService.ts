@@ -189,7 +189,10 @@ export class OutboundService {
 
     // 3. Get decrypted access token on trusted backend
     const connection = await WhatsAppConnectionService.getConnectionByTenantId(tenantId);
-    if (!connection || connection.connection_status !== 'connected') {
+    if (!connection) {
+      return { success: false, error: 'No WhatsApp connection found for this tenant.', errorCode: 'CONNECTION_NOT_ACTIVE' };
+    }
+    if (connection.connection_status !== 'connected') {
       return { success: false, error: 'No active WhatsApp connection is available for this workspace.', errorCode: 'CONNECTION_NOT_ACTIVE' };
     }
 
