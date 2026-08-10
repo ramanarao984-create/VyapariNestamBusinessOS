@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { processWebhookPayload } from './webhookProcessor';
+// @ts-ignore Vercel bundles this TypeScript server module into the function.
+import { processWebhookPayload } from './webhookProcessor.ts';
 
 function getDb() {
   const url = process.env.SUPABASE_URL;
