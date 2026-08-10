@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
+import { CryptoService } from '../../src/services/whatsapp/CryptoService';
 import { isWebhookSignatureValid, processWebhookPayload } from './webhookProcessor';
 
 export const config = { api: { bodyParser: false } };
@@ -11,8 +13,30 @@ function matchesSecret(provided: string | undefined, expected: string): boolean 
     && crypto.timingSafeEqual(providedBuffer, expectedBuffer);
 }
 
-function getVerifyToken(): string {
-  return process.env.META_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || '';
+
+function getDb() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('WhatsApp database configuration is missing.');
+  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+async function matchesStoredVerifyToken(provided: string): Promise<boolean> {
+  if (!provided) return false;
+  const { data, error } = await getDb()
+    .from('whatsapp_connections')
+    .select('verify_token')
+    .not('verify_token', 'is', null)
+    .limit(5000);
+
+  if (error) throw error;
+  return (data || []).some((row: any) => {
+    try {
+      return matchesSecret(provided, CryptoService.decrypt(String(row.verify_token || '')));
+    } catch {
+      return false;
+    }
+  });
 }
 
 function getRawBody(req: any): Promise<Buffer> {
@@ -27,10 +51,14 @@ function getRawBody(req: any): Promise<Buffer> {
 export default async function handler(req: any, res: any) {
   if (req.method === 'GET') {
     const query = req.query || {};
-    const isValid = query['hub.mode'] === 'subscribe'
-      && matchesSecret(query['hub.verify_token'], getVerifyToken());
-
-    if (!isValid) return res.status(403).send('Forbidden');
+    if (query['hub.mode'] !== 'subscribe') return res.status(403).send('Forbidden');
+    try {
+      const isValid = await matchesStoredVerifyToken(String(query['hub.verify_token'] || ''));
+      if (!isValid) return res.status(403).send('Forbidden');
+    } catch (error: any) {
+      console.error('WhatsApp webhook verification lookup failed.', { code: error?.code || 'WHATSAPP_DATABASE_UNAVAILABLE' });
+      return res.status(503).send('Webhook verification temporarily unavailable');
+    }
     return res.status(200).send(query['hub.challenge'] || '');
   }
 

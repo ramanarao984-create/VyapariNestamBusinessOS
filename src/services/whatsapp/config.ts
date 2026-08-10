@@ -18,11 +18,6 @@ export const WHATSAPP_CONFIG = {
   GRAPH_API_BASE_URL: 'https://graph.facebook.com',
 
   /**
-   * Default verify token fallback for development/handshake verification
-   */
-  DEFAULT_VERIFY_TOKEN: process.env.META_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || '',
-
-  /**
    * Meta App Secret for x-hub-signature-256 HMAC validation
    */
   META_APP_SECRET: process.env.META_APP_SECRET || process.env.WHATSAPP_APP_SECRET || '',

@@ -51,7 +51,7 @@ export class WebhookService {
       return { success: false, reason: 'Invalid hub.mode. Expected "subscribe".' };
     }
 
-    const expectedToken = tenantVerifyToken || WHATSAPP_CONFIG.DEFAULT_VERIFY_TOKEN;
+    const expectedToken = tenantVerifyToken || '';
 
     const bufToken = Buffer.from(token || '');
     const bufExpected = Buffer.from(expectedToken || '');
