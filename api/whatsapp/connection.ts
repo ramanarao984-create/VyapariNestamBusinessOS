@@ -40,6 +40,41 @@ function authError(res: any, status: number, code: string, message: string): nul
   return null;
 }
 
+function normalizeEmail(value: unknown) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function decodeFirebaseClaims(token: string): Record<string, any> {
+  try {
+    const payload = token.split('.')[1];
+    return payload ? JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) : {};
+  } catch {
+    return {};
+  }
+}
+
+function resolveFirebaseEmail(account: any, token: string) {
+  const directEmail = normalizeEmail(account?.email);
+  if (directEmail && account?.emailVerified !== false) return directEmail;
+
+  const googleProvider = Array.isArray(account?.providerUserInfo)
+    ? account.providerUserInfo.find((provider: any) => provider?.providerId === 'google.com' && provider?.email)
+    : null;
+  const providerEmail = normalizeEmail(googleProvider?.email);
+  if (providerEmail) return providerEmail;
+
+  // accounts:lookup above validates the Firebase token. The signed claims are a
+  // reliable fallback when Identity Toolkit omits email from the account record.
+  const claims = decodeFirebaseClaims(token);
+  const claimUid = String(claims.user_id || claims.sub || '');
+  const claimEmail = normalizeEmail(claims.email);
+  if (claimEmail && claims.email_verified === true && (!claimUid || claimUid === account?.localId)) {
+    return claimEmail;
+  }
+
+  return '';
+}
+
 async function authenticate(req: any, res: any) {
   const header = String(req.headers?.authorization || '');
   if (!header.startsWith('Bearer ')) {
@@ -87,7 +122,7 @@ async function authenticate(req: any, res: any) {
     if (!user) {
       const ownerEmail = String(process.env.WORKSPACE_OWNER_EMAIL || '').trim().toLowerCase();
       const bootstrapTenantId = String(process.env.WORKSPACE_TENANT_ID || '').trim();
-      const accountEmail = String(account.email || '').trim().toLowerCase();
+      const accountEmail = resolveFirebaseEmail(account, token);
 
       if (!ownerEmail || !bootstrapTenantId) {
         return authError(
@@ -98,12 +133,25 @@ async function authenticate(req: any, res: any) {
         );
       }
 
+      if (!accountEmail) {
+        return authError(
+          res,
+          403,
+          'WORKSPACE_AUTH_EMAIL_UNAVAILABLE',
+          'Google sign-in did not provide a verified email. Sign out, then sign in again and grant email access.',
+        );
+      }
+
       if (accountEmail !== ownerEmail) {
+        console.warn('Workspace owner email mismatch', {
+          authenticatedDomain: accountEmail.split('@')[1] || 'unknown',
+          configuredDomain: ownerEmail.split('@')[1] || 'unknown',
+        });
         return authError(
           res,
           403,
           'WORKSPACE_OWNER_EMAIL_MISMATCH',
-          'Sign in with the Google account configured as WORKSPACE_OWNER_EMAIL.',
+          'The signed-in Google email does not match WORKSPACE_OWNER_EMAIL in Vercel.',
         );
       }
 
