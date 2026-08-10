@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
-type Db = ReturnType<typeof createClient>;
+type Db = any;
 
 export type WebhookEvent =
   | {
