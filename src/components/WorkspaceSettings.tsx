@@ -452,72 +452,34 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
     setIsSimulatingWebhook(true);
     setSimulationAlert(null);
     try {
-      const cleanPhone = simulatedSenderPhone.replace(/[^0-9]/g, '');
-      const payload = {
-        object: 'whatsapp_business_account',
-        entry: [
-          {
-            id: 'simulated-entry-' + Date.now(),
-            changes: [
-              {
-                value: {
-                  messaging_product: 'whatsapp',
-                  metadata: {
-                    display_phone_number: '15555555555',
-                    phone_number_id: metaPhoneNumberId || '106555198032'
-                  },
-                  contacts: [
-                    {
-                      profile: {
-                        name: simulatedSenderName || 'New Lead'
-                      },
-                      wa_id: cleanPhone
-                    }
-                  ],
-                  messages: [
-                    {
-                      from: cleanPhone,
-                      id: 'sim-msg-' + Math.floor(100000 + Math.random() * 900000),
-                      timestamp: Math.floor(Date.now() / 1000).toString(),
-                      text: {
-                        body: simulatedSenderMessage
-                      },
-                      type: 'text'
-                    }
-                  ]
-                },
-                field: 'messages'
-              }
-            ]
-          }
-        ]
-      };
-
-      const response = await fetch('/api/whatsapp/webhook', {
-        method: 'POST',
+      const response = await authenticatedFetch('/api/whatsapp/connection', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          senderPhone: simulatedSenderPhone,
+          senderName: simulatedSenderName || 'New Lead',
+          message: simulatedSenderMessage,
+        }),
       });
+      const responseBody = await response.json().catch(() => ({}));
 
-      if (response.ok) {
+      if (response.ok && responseBody.success) {
         setSimulatedSenderMessage('');
         setSimulationAlert({
           type: 'success',
-          text: 'Webhook Simulation Dispatched! The message payload was processed by /api/whatsapp/webhook. Look at your CRM contact list!'
+          text: 'Inbound test processed through the authenticated tenant workspace. Check the CRM conversation list.',
         });
-        if (onManualSync) {
-          await onManualSync();
-        }
+        if (onManualSync) await onManualSync();
       } else {
         setSimulationAlert({
           type: 'error',
-          text: 'Webhook simulation failed: ' + response.statusText
+          text: responseBody.error || 'Inbound event test failed.',
         });
       }
     } catch (err: any) {
       setSimulationAlert({
         type: 'error',
-        text: 'Webhook simulation network error: ' + err.message
+        text: 'Inbound event test network error: ' + err.message,
       });
     } finally {
       setIsSimulatingWebhook(false);
@@ -1276,7 +1238,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                   <div className="border-t border-slate-100 pt-6 space-y-6">
                     <h3 className="text-xs font-bold text-slate-850 tracking-wider uppercase flex items-center gap-1.5 pb-2 border-b border-slate-100">
                       <Settings className="h-3.5 w-3.5 text-blue-600" />
-                      Interactive Web Pairing & API Test Suite
+                      Interactive Cloud API & Webhook Test Suite
                     </h3>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1286,7 +1248,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                         <div className="flex items-center justify-between">
                           <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                             <Smartphone className="h-3.5 w-3.5 text-blue-600" />
-                            WhatsApp Device Connection & Pairing
+                            Cloud API connection demo (not device pairing)
                           </h4>
                           <span className={`px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase border ${
                             connectionStatus === 'connected' 
@@ -1306,7 +1268,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                                 <QrCode className="h-20 w-20 text-slate-800" />
                               </div>
                               <p className="text-[10px] text-slate-500 max-w-xs font-medium leading-normal">
-                                Scan this QR code with WhatsApp on your phone to link your device with your CRM.
+                                Cloud API numbers do not pair through QR codes. This panel is only a visual demo; use the Live Meta API test to verify the real connection.
                               </p>
                               <button
                                 type="button"
@@ -1314,7 +1276,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                                 className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[10px] rounded-lg transition-all shadow-xs cursor-pointer inline-flex items-center gap-1"
                               >
                                 <Play className="h-3 w-3 fill-white" />
-                                Connect via QR Code
+                                Run visual demo
                               </button>
                             </div>
                           ) : connectionStatus === 'connecting' ? (
@@ -1323,7 +1285,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                                 <RefreshCw className="h-6 w-6 text-blue-600 animate-spin" />
                               </div>
                               <div className="space-y-1">
-                                <div className="text-[10px] font-bold text-slate-700">Pairing Device...</div>
+                                <div className="text-[10px] font-bold text-slate-700">Visual demo in progress...</div>
                                 <div className="w-full bg-slate-105 rounded-full h-1">
                                   <div className="bg-blue-600 h-1 rounded-full transition-all duration-300" style={{ width: `${simulatedProgress}%` }}></div>
                                 </div>
@@ -1483,7 +1445,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    safeCopyToClipboard(metaVerifyToken || 'whats_crm_verify_token');
+                                    if (metaVerifyToken) safeCopyToClipboard(metaVerifyToken);
                                     setTokenCopied(true);
                                     setTimeout(() => setTokenCopied(false), 2000);
                                   }}
@@ -1494,7 +1456,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                                 </button>
                               </div>
                               <div className="px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-mono text-slate-700 select-all truncate">
-                                {metaVerifyToken || 'whats_crm_verify_token'}
+                                {metaVerifyToken || (storedVerifyTokenMask ? 'Saved securely - enter token to copy' : 'Enter and save a verify token first')}
                               </div>
                             </div>
                           </div>
