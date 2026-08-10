@@ -269,7 +269,12 @@ describe('SECTION 2 PRODUCTION GUARANTEES & AUTOMATION ENGINE TESTS', () => {
     });
 
     it('retrying the same scheduled action generates only one outbound job (idempotency key protection)', async () => {
-      vi.spyOn(ConsentService, 'getConsentStatus').mockResolvedValue('opted_in');
+      // Keep this assertion independent of the wall clock and the default 21:00-08:00 quiet-hours window.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-08-10T12:00:00.000Z'));
+
+      try {
+        vi.spyOn(ConsentService, 'getConsentStatus').mockResolvedValue('opted_in');
 
       const mockAction = {
         id: 'act_idemp_test_99',
@@ -298,15 +303,18 @@ describe('SECTION 2 PRODUCTION GUARANTEES & AUTOMATION ENGINE TESTS', () => {
       await DurableAutomationEngine.processDueActions('worker_idemp_1', 10);
 
       // Verify enqueue was called with deterministic idempotency key
-      expect(enqueueSpy).toHaveBeenCalledWith(
-        tenantId,
-        'auto_job_act_idemp_test_99',
-        '+919876543210',
-        expect.objectContaining({
-          recipientPhone: '+919876543210',
-          source: 'automation'
-        })
-      );
+        expect(enqueueSpy).toHaveBeenCalledWith(
+          tenantId,
+          'auto_job_act_idemp_test_99',
+          '+919876543210',
+          expect.objectContaining({
+            recipientPhone: '+919876543210',
+            source: 'automation'
+          })
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
