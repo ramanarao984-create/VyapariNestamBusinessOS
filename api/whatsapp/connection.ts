@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
+import { processWebhookPayload } from './webhookProcessor';
 
 function getDb() {
   const url = process.env.SUPABASE_URL;
@@ -234,6 +235,53 @@ export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET') return res.status(200).json(await readConnection(identity.tenantId));
 
+    if (req.method === 'PUT') {
+      const { senderPhone, senderName, message } = req.body || {};
+      const cleanPhone = String(senderPhone || '').replace(/[^0-9]/g, '');
+      const cleanName = String(senderName || '').trim();
+      const cleanMessage = String(message || '').trim();
+
+      if (!/^\\d{8,15}$/.test(cleanPhone) || !cleanName || cleanName.length > 100 || !cleanMessage || cleanMessage.length > 4096) {
+        return res.status(400).json({ success: false, error: 'A valid sender phone, sender name, and message are required.' });
+      }
+
+      const { data: configured, error: configuredError } = await getDb()
+        .from('whatsapp_connections')
+        .select('phone_number_id')
+        .eq('tenant_id', identity.tenantId)
+        .maybeSingle();
+
+      if (configuredError) throw Object.assign(new Error('WhatsApp connection storage is unavailable.'), { code: 'WHATSAPP_DATABASE_UNAVAILABLE' });
+      if (!configured?.phone_number_id) {
+        return res.status(409).json({ success: false, error: 'Save a WhatsApp Cloud API connection before testing inbound events.' });
+      }
+
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [{
+          id: `simulated-entry-${Date.now()}`,
+          changes: [{
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: { phone_number_id: configured.phone_number_id },
+              contacts: [{ profile: { name: cleanName }, wa_id: cleanPhone }],
+              messages: [{
+                from: cleanPhone,
+                id: `sim-msg-${crypto.randomUUID()}`,
+                timestamp: Math.floor(Date.now() / 1000).toString(),
+                text: { body: cleanMessage },
+                type: 'text',
+              }],
+            },
+          }],
+        }],
+      };
+
+      const result = await processWebhookPayload(payload);
+      return res.status(200).json({ success: true, result });
+    }
+
     if (req.method === 'POST') {
       const { phoneNumberId, accessToken, wabaId, verifyToken, displayPhoneNumber, verifiedName } = req.body || {};
       if (!phoneNumberId || typeof phoneNumberId !== 'string') {
@@ -270,7 +318,7 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ success: true, connection: await readConnection(identity.tenantId) });
     }
 
-    res.setHeader('Allow', 'GET, POST');
+    res.setHeader('Allow', 'GET, POST, PUT');
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error: any) {
     const status = ['WHATSAPP_SCHEMA_NOT_READY', 'WHATSAPP_DATABASE_UNAVAILABLE'].includes(error.code) ? 503 : 500;
