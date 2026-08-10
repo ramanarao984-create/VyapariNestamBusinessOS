@@ -10,6 +10,7 @@ import { CostMeteringService } from './CostMeteringService';
 import { getMetaGraphUrl, WHATSAPP_CONFIG } from './config';
 import { logger } from '../metadata/logger';
 import { getSupabaseClient } from '../../supabase/client';
+import { OutboundValidationError, validateOutboundRequest } from '../../../api/whatsapp/outboundValidation';
 
 export interface SendMessageOptions {
   tenantId: string;
@@ -95,7 +96,7 @@ export class OutboundService {
    * Main server-side outbound message dispatch with retry logic & token decryption
    */
   public static async sendMessage(options: SendMessageOptions): Promise<SendMessageResult> {
-    const {
+    let {
       tenantId,
       recipientPhone,
       messageType = 'text',
@@ -109,21 +110,62 @@ export class OutboundService {
     } = options;
 
     if (!tenantId || !recipientPhone) {
-      return { success: false, error: 'tenantId and recipientPhone are required.' };
+      return { success: false, error: 'tenantId and recipientPhone are required.', errorCode: 'INVALID_RECIPIENT' };
     }
 
-    // Format phone number to E.164 without '+'
-    const cleanPhone = recipientPhone.replace(/[^0-9]/g, '');
+    try {
+      const validated = validateOutboundRequest({
+        recipient: recipientPhone,
+        message: textBody,
+        messageType,
+        templateName,
+        templateLanguage,
+        templateComponents,
+        mediaUrl,
+        conversationId: providedConvId,
+      });
+      recipientPhone = validated.recipient;
+      textBody = validated.message;
+      messageType = validated.messageType;
+      templateName = validated.templateName;
+      templateLanguage = validated.templateLanguage || 'en_US';
+      templateComponents = validated.templateComponents || [];
+      mediaUrl = validated.mediaUrl;
+      providedConvId = validated.conversationId;
+    } catch (error: any) {
+      if (error instanceof OutboundValidationError) {
+        return { success: false, error: error.message, errorCode: error.code };
+      }
+      return { success: false, error: 'Outbound message validation failed.', errorCode: 'INVALID_OUTBOUND_REQUEST' };
+    }
+
+    const cleanPhone = recipientPhone;
 
     // 1. Resolve or ensure conversation
     let conversation: { id: string };
     try {
-      conversation = providedConvId
-        ? { id: providedConvId }
-        : await ConversationService.ensureConversation(tenantId, cleanPhone);
+      if (providedConvId) {
+        const { data, error } = await getSupabaseClient()
+          .from('whatsapp_conversations')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('id', providedConvId)
+          .maybeSingle();
+
+        if (error) {
+          logger.error('OutboundService', 'Conversation ownership lookup failed.', error, { tenantId });
+          return { success: false, error: 'Message context could not be verified.', errorCode: 'CONVERSATION_CONTEXT_UNAVAILABLE' };
+        }
+        if (!data) {
+          return { success: false, error: 'The selected conversation is not part of this workspace.', errorCode: 'INVALID_CONVERSATION_CONTEXT' };
+        }
+        conversation = { id: data.id };
+      } else {
+        conversation = await ConversationService.ensureConversation(tenantId, cleanPhone);
+      }
     } catch (convErr: any) {
-      logger.error('OutboundService', `Failed to ensure conversation for tenant ${tenantId}`, convErr);
-      return { success: false, error: 'Failed to dispatch outbound message due to database error.' };
+      logger.error('OutboundService', 'Failed to ensure outbound conversation.', convErr, { tenantId });
+      return { success: false, error: 'Failed to prepare message delivery.', errorCode: 'CONVERSATION_CONTEXT_UNAVAILABLE' };
     }
 
     // 2. Evaluate outbound policy (24-hour service window & consent)
@@ -148,12 +190,15 @@ export class OutboundService {
     // 3. Get decrypted access token on trusted backend
     const connection = await WhatsAppConnectionService.getConnectionByTenantId(tenantId);
     if (!connection) {
-      return { success: false, error: 'No WhatsApp connection found for this tenant.' };
+      return { success: false, error: 'No WhatsApp connection found for this tenant.', errorCode: 'CONNECTION_NOT_ACTIVE' };
+    }
+    if (connection.connection_status !== 'connected') {
+      return { success: false, error: 'No active WhatsApp connection is available for this workspace.', errorCode: 'CONNECTION_NOT_ACTIVE' };
     }
 
     const token = await WhatsAppConnectionService.getDecryptedAccessToken(tenantId);
     if (!token) {
-      return { success: false, error: 'No active decrypted access token available for this tenant.' };
+      return { success: false, error: 'No active WhatsApp credential is available for this workspace.', errorCode: 'CONNECTION_NOT_ACTIVE' };
     }
 
     // 3. Construct Meta Graph API payload
@@ -225,7 +270,6 @@ export class OutboundService {
             success: true,
             metaMessageId,
             messageRecord: msgRecord,
-            details: responseData,
           };
         }
 
@@ -275,7 +319,7 @@ export class OutboundService {
       error: lastErrorMsg,
       errorCode: lastErrorCode,
       messageRecord: failedMsgRecord,
-      details: responseData,
+      details: undefined,
     };
   }
 }

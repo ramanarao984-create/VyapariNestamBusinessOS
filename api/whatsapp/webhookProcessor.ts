@@ -225,6 +225,24 @@ async function processInboundMessage(db: Db, tenantId: string, event: Extract<We
       .eq('id', conversation.id);
 
     if (conversationError) throw configurationError('Inbound WhatsApp conversation could not be updated.', 'WHATSAPP_DATABASE_UNAVAILABLE');
+
+    const inboundAt = providerTimestamp(event.message.timestamp);
+    const windowExpiresAt = new Date(new Date(inboundAt).getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const { error: windowError } = await db.from('whatsapp_conversation_windows').upsert({
+      id: `window_${tenantId}_${conversation.id}`,
+      tenant_id: tenantId,
+      conversation_id: conversation.id,
+      last_inbound_at: inboundAt,
+      window_expires_at: windowExpiresAt,
+      updated_at: now,
+    }, { onConflict: 'tenant_id,conversation_id' });
+
+    // Keep the inbound message durable even when an older database has not yet
+    // applied the service-window migration. Templates remain safe in that case.
+    if (windowError) {
+      console.error('WhatsApp service-window update failed.', { code: windowError.code || 'unknown' });
+    }
+
     await finishEvent(db, eventId, 'processed');
     return 'processed';
   } catch (error: any) {
