@@ -5,7 +5,7 @@
 
 import { getSupabaseClient } from '../../supabase/client';
 import { CryptoService } from './CryptoService';
-import { WHATSAPP_CONFIG, getMetaGraphUrl } from './config';
+import { getMetaGraphUrl } from './config';
 import { logger } from '../metadata/logger';
 
 export interface WhatsAppConnectionRecord {
@@ -196,7 +196,7 @@ export class WhatsAppConnectionService {
           verifiedName: null,
           connectionStatus: 'schema_not_ready',
           maskedToken: null,
-          verifyToken: WHATSAPP_CONFIG.DEFAULT_VERIFY_TOKEN,
+          verifyToken: '',
           lastVerifiedAt: null,
         };
       }
@@ -237,7 +237,7 @@ export class WhatsAppConnectionService {
       verifiedName: connection.verified_name,
       connectionStatus: connection.connection_status,
       maskedToken,
-      verifyToken: connection.verify_token || WHATSAPP_CONFIG.DEFAULT_VERIFY_TOKEN,
+      verifyToken: connection.verify_token || '',
       lastVerifiedAt: connection.last_verified_at,
     };
   }
@@ -265,7 +265,7 @@ export class WhatsAppConnectionService {
 
     const connectionId = existing?.id || `conn_${tenantId}_${Date.now()}`;
     const now = new Date().toISOString();
-    const finalVerifyToken = verifyToken || existing?.verify_token || WHATSAPP_CONFIG.DEFAULT_VERIFY_TOKEN;
+    const finalVerifyToken = verifyToken || existing?.verify_token || '';
 
     const payload: WhatsAppConnectionRecord = {
       id: connectionId,
