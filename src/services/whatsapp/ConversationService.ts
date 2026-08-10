@@ -283,6 +283,7 @@ export class ConversationService {
       await supabase
         .from('whatsapp_conversations')
         .update({ last_message_at: now, updated_at: now, contact_name: msg.contactName || conversation.contact_name })
+        .eq('tenant_id', msg.tenantId)
         .eq('id', conversation.id);
 
       return {
@@ -350,6 +351,7 @@ export class ConversationService {
       await supabase
         .from('whatsapp_conversations')
         .update({ last_message_at: now, updated_at: now })
+        .eq('tenant_id', tenantId)
         .eq('id', conversationId);
 
       return (data as MessageRecord) || newMsgPayload;
@@ -382,6 +384,7 @@ export class ConversationService {
       const { error } = await supabase
         .from('whatsapp_messages')
         .update(updatePayload)
+        .eq('tenant_id', statusUpdate.tenantId)
         .eq('meta_message_id', statusUpdate.metaMessageId);
 
       if (error) {
