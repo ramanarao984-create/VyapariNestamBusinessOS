@@ -53,7 +53,7 @@ function decodeFirebaseClaims(token: string): Record<string, any> {
   }
 }
 
-function resolveFirebaseEmail(account: any, token: string) {
+export function resolveFirebaseEmail(account: any, token: string) {
   const directEmail = normalizeEmail(account?.email);
   if (directEmail && account?.emailVerified !== false) return directEmail;
 
