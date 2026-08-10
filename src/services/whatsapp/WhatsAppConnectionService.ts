@@ -213,7 +213,7 @@ export class WhatsAppConnectionService {
         verifiedName: null,
         connectionStatus: 'disconnected',
         maskedToken: null,
-        verifyToken: WHATSAPP_CONFIG.DEFAULT_VERIFY_TOKEN,
+        verifyToken: '',
         lastVerifiedAt: null,
       };
     }
