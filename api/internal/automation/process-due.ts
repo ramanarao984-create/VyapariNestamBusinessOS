@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import {createClient} from '@supabase/supabase-js';
+import { processQueuedWhatsAppJobs } from '../../../src/services/whatsapp/OutboundJobWorker';
 
 type CronRequest = {
   method?: string;
@@ -263,6 +264,7 @@ export default async function handler(req: CronRequest, res: JsonResponse) {
     let succeeded = 0;
     let failed = 0;
     let skipped = 0;
+    let outboundDelivery: Record<string, unknown> | null = null;
 
     for (const action of actions) {
       try {
@@ -344,6 +346,15 @@ export default async function handler(req: CronRequest, res: JsonResponse) {
       }
     }
 
+    try {
+      outboundDelivery = await processQueuedWhatsAppJobs(batchSize);
+    } catch (error: any) {
+      // Automation actions are already durable. A later cron invocation can retry
+      // delivery without duplicating a queued job.
+      console.error('[automation] queued WhatsApp delivery failed', { code: error?.code || 'WHATSAPP_DELIVERY_WORKER_FAILED' });
+      outboundDelivery = { unavailable: true, code: error?.code || 'WHATSAPP_DELIVERY_WORKER_FAILED' };
+    }
+
     return res.status(200).json({
       success: true,
       workerId,
@@ -353,6 +364,7 @@ export default async function handler(req: CronRequest, res: JsonResponse) {
         failed,
         skipped,
       },
+      outboundDelivery,
     });
   } catch (error: any) {
     console.error('[automation] process-due failed', error);
