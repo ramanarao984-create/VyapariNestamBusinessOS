@@ -1,11 +1,20 @@
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-// @ts-ignore Vercel bundles this TypeScript server module into the function.
-import { CryptoService } from '../../src/services/whatsapp/CryptoService.ts';
-// @ts-ignore Vercel bundles this TypeScript server module into the function.
-import { isWebhookSignatureValid, processWebhookPayload } from './webhookProcessor.ts';
+import { isWebhookSignatureValid, processWebhookPayload } from './webhookProcessor.js';
 
 export const config = { api: { bodyParser: false } };
+
+function decryptStoredToken(value: string): string {
+  if (!value) return '';
+  if (!value.startsWith('v1:')) return value;
+  const secret = process.env.ENCRYPTION_SECRET;
+  if (!secret || secret.length < 32) throw new Error('ENCRYPTION_SECRET is missing or too short.');
+  const key = crypto.createHash('sha256').update(secret).digest();
+  const [ivHex, tagHex, encryptedHex] = value.slice(3).split(':');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(ivHex, 'hex'));
+  decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+  return Buffer.concat([decipher.update(Buffer.from(encryptedHex, 'hex')), decipher.final()]).toString('utf8');
+}
 
 function matchesSecret(provided: string | undefined, expected: string): boolean {
   if (!provided || !expected) return false;
@@ -34,7 +43,7 @@ async function matchesStoredVerifyToken(provided: string): Promise<boolean> {
   if (error) throw error;
   return (data || []).some((row: any) => {
     try {
-      return matchesSecret(provided, CryptoService.decrypt(String(row.verify_token || '')));
+      return matchesSecret(provided, decryptStoredToken(String(row.verify_token || '')));
     } catch {
       return false;
     }
