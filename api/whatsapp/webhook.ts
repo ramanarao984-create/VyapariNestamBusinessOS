@@ -1,9 +1,6 @@
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-// @ts-ignore Vercel bundles this TypeScript server module into the function.
-import { CryptoService } from '../../src/services/whatsapp/CryptoService.ts';
-// @ts-ignore Vercel bundles this TypeScript server module into the function.
-import { isWebhookSignatureValid, processWebhookPayload } from './webhookProcessor.ts';
+import { isWebhookSignatureValid, processWebhookPayload } from './webhookProcessor.js';
 
 export const config = { api: { bodyParser: false } };
 
