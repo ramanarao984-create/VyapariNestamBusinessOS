@@ -7,7 +7,7 @@ describe('outbound WhatsApp request validation', () => {
       recipient: '+91 90877 79869',
       message: 'Appointment reminder',
     })).toMatchObject({
-      recipient: '9190877979869',
+      recipient: '919087779869',
       messageType: 'text',
     });
   });
