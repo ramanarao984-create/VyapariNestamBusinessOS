@@ -69,7 +69,7 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({
   currentUserRole = 'Admin'
 }) => {
   // Inbox View Filters
-  const [viewFilter, setViewFilter] = useState<'all' | 'mine' | 'unassigned' | 'handover_required' | 'sla_breached' | 'resolved'>('handover_required');
+  const [viewFilter, setViewFilter] = useState<'all' | 'mine' | 'assigned'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [inboxItems, setInboxItems] = useState<InboxItem[]>([]);
@@ -386,13 +386,13 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({
           </div>
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              Shared WhatsApp Inbox & Human Handover Workspace
+              WhatsApp Chats
               <span className="px-2 py-0.5 bg-teal-500/20 text-teal-300 text-[10px] font-mono rounded-md border border-teal-500/30">
                 Phase 4
               </span>
             </h2>
             <p className="text-[11px] text-slate-400">
-              Multi-operator inbox with tenant isolation, SLA breach tracking, and controlled automation resume.
+              Contacts and WhatsApp conversations for your workspace.
             </p>
           </div>
         </div>
@@ -430,39 +430,20 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({
         <div className="w-80 border-r border-slate-200 flex flex-col bg-slate-50/50">
           {/* View Mode Tabs */}
           <div className="p-2.5 border-b border-slate-200 bg-white grid grid-cols-3 gap-1 text-[11px] font-bold">
-            <button
-              type="button"
-              onClick={() => setViewFilter('handover_required')}
-              className={`py-1.5 px-2 rounded-lg transition-all text-center cursor-pointer ${
-                viewFilter === 'handover_required' 
-                  ? 'bg-amber-500 text-slate-950 font-extrabold shadow-2xs' 
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              Handover
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewFilter('mine')}
-              className={`py-1.5 px-2 rounded-lg transition-all text-center cursor-pointer ${
-                viewFilter === 'mine' 
-                  ? 'bg-teal-600 text-white font-extrabold shadow-2xs' 
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              Mine
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewFilter('unassigned')}
-              className={`py-1.5 px-2 rounded-lg transition-all text-center cursor-pointer ${
-                viewFilter === 'unassigned' 
-                  ? 'bg-slate-800 text-white font-extrabold shadow-2xs' 
-                  : 'text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              Unassigned
-            </button>
+            {[
+              ['all', 'Chats'],
+              ['mine', 'Mine'],
+              ['assigned', 'Assigned'],
+            ].map(([filter, label]) => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setViewFilter(filter as 'all' | 'mine' | 'assigned')}
+                className={`py-1.5 px-2 rounded-lg transition-all text-center cursor-pointer ${viewFilter === filter ? 'bg-teal-600 text-white font-extrabold shadow-2xs' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           {/* Secondary Filters & Search */}
@@ -471,7 +452,7 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({
               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search phone or name..."
+                placeholder="Search contacts and chats..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && fetchInbox()}
@@ -508,7 +489,7 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({
             ) : inboxItems.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-xs space-y-1">
                 <p className="font-bold text-slate-600">No conversations found</p>
-                <p className="text-[11px]">No items match the filter "{viewFilter}".</p>
+                <p className="text-[11px]">Try Chats, Mine, or Assigned, or change your search.</p>
               </div>
             ) : (
               inboxItems.map(item => {
@@ -898,7 +879,7 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({
             <Inbox className="h-10 w-10 text-slate-300" />
             <h3 className="text-sm font-bold text-slate-700">Select a conversation</h3>
             <p className="text-xs text-slate-500 max-w-sm">
-              Choose an item from the left panel to open the human handover workspace, view notes, and manage automation.
+              Choose a contact from the left panel to open the chat.
             </p>
           </div>
         )}

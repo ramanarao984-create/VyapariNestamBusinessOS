@@ -11,6 +11,7 @@ import { ConversationWindowEvaluator, SERVICE_WINDOW_DURATION_MS } from './Conve
 export type InboxViewFilter =
   | 'all'
   | 'unassigned'
+  | 'assigned'
   | 'assigned_to_me'
   | 'handover_required'
   | 'waiting_for_customer'
@@ -100,7 +101,11 @@ export class InboxService {
       // Apply view filter
       if (viewFilter === 'unassigned') {
         query = query.is('assigned_user_id', null);
-      } else if (viewFilter === 'assigned_to_me' && currentUserId) {
+      } else if (viewFilter === 'assigned') {
+        query = query.not('assigned_user_id', 'is', null);
+      } else if (viewFilter === 'assigned') {
+            fbQuery = fbQuery.not('assigned_user_id', 'is', null);
+          } else if (viewFilter === 'assigned_to_me' && currentUserId) {
         query = query.eq('assigned_user_id', currentUserId);
       } else if (viewFilter === 'handover_required') {
         query = query.eq('is_handover_required', true);
