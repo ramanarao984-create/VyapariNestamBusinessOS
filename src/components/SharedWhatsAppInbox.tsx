@@ -6,6 +6,7 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Bot, CheckCheck, ChevronDown, MessageCircle, Plus, RefreshCw, Search, Send, Sparkles, X } from 'lucide-react';
 import { authenticatedFetch } from '../auth/apiClient';
+import type { MessageTemplate } from '../types';
 
 interface Chat {
   id: string;
@@ -37,13 +38,14 @@ interface Template {
 export interface SharedWhatsAppInboxProps {
   currentUserId?: string;
   currentUserRole?: string;
+  teamTemplates?: MessageTemplate[];
 }
 
 const apiRoute = (route: string, params = '') => '/api/whatsapp/connection?whatsappRoute=' + route + (params ? '&' + params : '');
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 const templateNeedsVariables = (template: Template) => JSON.stringify(template.components || []).includes('{{');
 
-export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = () => {
+export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({ teamTemplates = [] }) => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -56,6 +58,7 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = () => {
   const [sending, setSending] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [teamTemplatesOpen, setTeamTemplatesOpen] = useState(false);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [showNewChat, setShowNewChat] = useState(false);
@@ -186,6 +189,16 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = () => {
 
   const visibleChats = useMemo(() => chats, [chats]);
   const canSendText = Boolean(selectedChat?.is_24h_window_open);
+  const loadTeamSnippet = (template: MessageTemplate) => {
+    const contactName = selectedChat?.contact_name || 'there';
+    const message = template.text
+      .replace(/\{\{name\}\}/g, contactName)
+      .replace(/\{\{contactName\}\}/g, contactName);
+    setComposer(message);
+    setSelectedTemplate(null);
+    setTeamTemplatesOpen(false);
+    setStatus('Team snippet loaded. Review and edit it before sending.');
+  };
 
   return (
     <section className="h-full min-h-[650px] rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden flex flex-col">
@@ -230,8 +243,15 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = () => {
               {selectedTemplate && <div className="mb-2 flex items-center justify-between rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs text-teal-900"><span>Template: <strong>{selectedTemplate.name}</strong> ({selectedTemplate.language})</span><button type="button" onClick={() => setSelectedTemplate(null)} title="Clear selected template"><X className="h-4 w-4" /></button></div>}
               {aiOpen && <div className="mb-2 flex items-center justify-between rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900"><span><strong>AI draft only:</strong> review and edit before sending.</span><button type="button" onClick={() => setAiOpen(false)} title="Close AI draft notice"><X className="h-4 w-4" /></button></div>}
               <div className="flex items-end gap-2">
+                {canSendText && <div className="relative">
+                  <button type="button" onClick={() => { setTeamTemplatesOpen((open) => !open); setTemplatesOpen(false); }} className="rounded-lg border border-teal-200 p-2 text-teal-700 hover:bg-teal-50" title="Load a saved team reply snippet"><Sparkles className="h-5 w-5" /></button>
+                  {teamTemplatesOpen && <div className="absolute bottom-11 left-0 z-10 w-80 rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
+                    <div className="px-2 py-1 text-xs font-bold text-slate-700">Saved team snippets</div>
+                    {teamTemplates.length === 0 ? <p className="p-3 text-xs text-slate-500">Create a reply template in Fast Reply Templates first.</p> : teamTemplates.map((template) => <button key={template.id} type="button" onClick={() => loadTeamSnippet(template)} className="block w-full rounded-md px-3 py-2 text-left hover:bg-slate-50"><span className="block text-xs font-bold text-slate-800">{template.title}</span><span className="text-[10px] text-slate-500">{template.category}</span></button>)}
+                  </div>}
+                </div>}
                 <div className="relative">
-                  <button type="button" onClick={() => { setTemplatesOpen((open) => !open); if (!templates.length) void loadTemplates(); }} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50" title="Approved Meta templates"><ChevronDown className="h-5 w-5" /></button>
+                  <button type="button" onClick={() => { setTemplatesOpen((open) => !open); setTeamTemplatesOpen(false); if (!templates.length) void loadTemplates(); }} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50" title="Approved Meta templates"><ChevronDown className="h-5 w-5" /></button>
                   {templatesOpen && <div className="absolute bottom-11 left-0 z-10 w-80 rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
                     <div className="flex items-center justify-between px-2 py-1 text-xs font-bold text-slate-700"><span>Approved Meta templates</span><button type="button" onClick={() => void loadTemplates(true)} className="text-teal-700 hover:underline">{templatesLoading ? 'Syncing...' : 'Sync from Meta'}</button></div>
                     {templatesLoading ? <p className="p-3 text-xs text-slate-400">Loading templates...</p> : templates.length === 0 ? <p className="p-3 text-xs text-slate-500">No approved templates are synced yet. Select “Sync from Meta”.</p> : templates.map((template) => <button key={template.id} type="button" disabled={templateNeedsVariables(template)} onClick={() => { setSelectedTemplate(template); setTemplatesOpen(false); setComposer(''); }} className="block w-full rounded-md px-3 py-2 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"><span className="block text-xs font-bold text-slate-800">{template.name}</span><span className="text-[10px] text-slate-500">{template.category} · {template.language}{templateNeedsVariables(template) ? ' · needs variable values' : ''}</span></button>)}
@@ -241,7 +261,7 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = () => {
                 <textarea value={composer} disabled={Boolean(selectedTemplate)} onChange={(event) => { setComposer(event.target.value); setSelectedTemplate(null); }} rows={2} placeholder={selectedTemplate ? 'An approved template will be sent.' : canSendText ? 'Write a message...' : 'Choose an approved template to start a conversation.'} className="flex-1 resize-none rounded-lg border border-slate-200 p-2 text-sm outline-none focus:border-teal-500 disabled:bg-slate-50" />
                 <button type="submit" disabled={sending || (!selectedTemplate && (!composer.trim() || !canSendText))} className="rounded-lg bg-teal-600 p-3 text-white disabled:opacity-50" title="Send message"><Send className="h-4 w-4" /></button>
               </div>
-              <p className="mt-2 text-[10px] text-slate-500">Free-text replies are available for 24 hours after a customer message. Outside that window, choose an approved Meta template.</p>
+              <p className="mt-2 text-[10px] text-slate-500">Saved team snippets and free-text replies are available for 24 hours after a customer message. Outside that window, choose an approved Meta template.</p>
             </form>
           </> : <div className="flex flex-1 flex-col items-center justify-center text-slate-400"><MessageCircle className="h-10 w-10" /><p className="mt-3 text-sm font-bold text-slate-600">Select a chat</p><p className="mt-1 text-xs">Or create a new compliant conversation.</p></div>}
         </main>
