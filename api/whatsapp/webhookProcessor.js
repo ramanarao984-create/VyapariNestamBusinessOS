@@ -22,16 +22,17 @@ export function extractWebhookEvents(payload) {
   const events = [];
   for (const entry of payload.entry) for (const change of Array.isArray(entry.changes) ? entry.changes : []) {
     if (change?.field !== 'messages') continue;
+    const wabaId = String(entry?.id || '').trim();
     const value = change.value || {};
     const phoneNumberId = String(value.metadata?.phone_number_id || '').trim();
     if (!phoneNumberId) continue;
     const contacts = Array.isArray(value.contacts) ? value.contacts : [];
     for (const message of Array.isArray(value.messages) ? value.messages : []) {
       if (!message?.id || !message?.from) continue;
-      events.push({ kind: 'message', phoneNumberId, message, contact: contacts.find((c) => c?.wa_id === message.from) || contacts[0] || null });
+      events.push({ kind: 'message', phoneNumberId, wabaId, message, contact: contacts.find((c) => c?.wa_id === message.from) || contacts[0] || null });
     }
     for (const status of Array.isArray(value.statuses) ? value.statuses : []) {
-      if (status?.id && status?.status) events.push({ kind: 'status', phoneNumberId, status });
+      if (status?.id && status?.status) events.push({ kind: 'status', phoneNumberId, wabaId, status });
     }
   }
   return events;
