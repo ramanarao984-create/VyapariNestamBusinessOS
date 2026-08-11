@@ -1143,7 +1143,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
         {/* ==================== SUB-TAB 0: LIVE WHATSAPP & PATIENT INBOX ==================== */}
         {activeSubTab === 'inbox' && (
           <div className="flex-1 flex flex-col min-h-0 space-y-3 animate-fade-in">
-            <SharedWhatsAppInbox />
+            <SharedWhatsAppInbox teamTemplates={templates} />
           </div>
         )}
               
