@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { processWebhookPayload } from './webhookProcessor.js';
 
-function getDb() {
+export function getDb() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw Object.assign(new Error('Supabase server configuration is missing.'), { code: 'WHATSAPP_DATABASE_UNAVAILABLE' });
@@ -22,7 +22,7 @@ function encrypt(value: string) {
   return `v1:${iv.toString('hex')}:${cipher.getAuthTag().toString('hex')}:${encrypted.toString('hex')}`;
 }
 
-function decrypt(value: string) {
+export function decrypt(value: string) {
   if (!value) return '';
   if (!value.startsWith('v1:')) return value;
   const [ivHex, tagHex, encryptedHex] = value.slice(3).split(':');
@@ -76,7 +76,7 @@ export function resolveFirebaseEmail(account: any, token: string) {
   return '';
 }
 
-async function authenticate(req: any, res: any) {
+export async function authenticate(req: any, res: any) {
   const header = String(req.headers?.authorization || '');
   if (!header.startsWith('Bearer ')) {
     authError(res, 401, 'UNAUTHENTICATED', 'Missing or invalid Authorization header.');
