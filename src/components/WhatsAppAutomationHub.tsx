@@ -393,7 +393,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
   const [selectedBroadcastContacts, setSelectedBroadcastContacts] = useState<string[]>([]);
   const [contactSearchQuery, setContactSearchQuery] = useState('');
   const [showBroadcastConfirmModal, setShowBroadcastConfirmModal] = useState(false);
-  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const isBroadcasting = false;
   const [broadcastProgress, setBroadcastProgress] = useState(0);
   const [broadcastLogs, setBroadcastLogs] = useState<string[]>([]);
   const [broadcastComplete, setBroadcastComplete] = useState(false);
@@ -423,55 +423,27 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
     setTotalCostEstimate(selectedBroadcastContacts.length * 0.008);
   }, [selectedBroadcastContacts]);
 
-  const handleStartBroadcast = async () => {
+  const handleStartBroadcast = () => {
     if (!selectedBroadcastTemplate) return;
-    setIsBroadcasting(true);
-    setShowBroadcastConfirmModal(false);
-    setBroadcastProgress(0);
-    setBroadcastLogs([`[${new Date().toLocaleTimeString()}] Initializing bulk campaign sequence...`]);
 
     const targetContacts = contacts.filter(c => selectedBroadcastContacts.includes(c.id));
+    setShowBroadcastConfirmModal(false);
+    setBroadcastProgress(0);
 
     if (targetContacts.length === 0) {
-      setBroadcastLogs(prev => [...prev, `[ERROR] No active contacts selected for this campaign.`]);
-      setIsBroadcasting(false);
+      setBroadcastLogs([`[ERROR] Select at least one contact before preparing a campaign.`]);
       return;
     }
 
-    setBroadcastLogs(prev => [...prev, `[INFO] Targeting ${targetContacts.length} contacts for this campaign.`]);
-
-    for (let i = 0; i < targetContacts.length; i++) {
-      const contact = targetContacts[i];
-      await new Promise(r => setTimeout(r, 600));
-
-      const rawText = selectedBroadcastTemplate.text;
-      const personalizedText = rawText
-        .replace(/\{\{businessName\}\}/g, businessName)
-        .replace(/\{\{senderName\}\}/g, senderName)
-        .replace(/\{\{timings\}\}/g, aiKnowledgeBase.timings || '')
-        .replace(/\{\{treatments\}\}/g, aiKnowledgeBase.treatments || '')
-        .replace(/\{\{doctors\}\}/g, aiKnowledgeBase.doctors || '')
-        .replace(/\{\{reviews\}\}/g, aiKnowledgeBase.reviews || '');
-
-      if (onLogInteraction) {
-        onLogInteraction(
-          contact.id,
-          'WhatsApp Sent',
-          `Bulk Broadcast: "${selectedBroadcastTemplate.title}"\n${personalizedText}`,
-          whatsappMode === 'meta' ? 'Meta Cloud API (Billed)' : 'Simulated Gateway Success'
-        );
-      }
-
-      setBroadcastLogs(prev => [
-        ...prev,
-        `[SUCCESS] Message sent to ${contact.name} (${contact.phone}) - Meta API Status: 200 OK`
-      ]);
-
-      setBroadcastProgress(Math.round(((i + 1) / targetContacts.length) * 100));
-    }
-
-    setBroadcastLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] 🎉 Campaign dispatch completed! All nodes confirmed.`]);
-    setIsBroadcasting(false);
+    // This product does not bulk-send local shortcuts. Meta approval, recipient consent,
+    // and a durable queue are required before a campaign can become a live dispatch.
+    setBroadcastLogs([
+      `[${new Date().toLocaleTimeString()}] Campaign draft prepared for ${targetContacts.length} contact(s).`,
+      `[CHECK] Selected team template: "${selectedBroadcastTemplate.title}".`,
+      '[SAFE MODE] No WhatsApp messages were sent and no Meta charges were created.',
+      '[NEXT] Use an approved Meta template and verified consent before enabling delivery.'
+    ]);
+    setBroadcastProgress(100);
     setBroadcastComplete(true);
   };
 
@@ -1234,7 +1206,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  📣 Bulk Promotions
+                  Campaign Preflight
                 </button>
               </div>
             </div>
@@ -1342,6 +1314,11 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                 </div>
               </div>
 
+              <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-3 text-[10px] text-amber-900 leading-relaxed">
+                <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <p><strong>Team shortcuts, not Meta approvals:</strong> use these templates to help your staff reply consistently inside an open 24-hour customer service window. For a new outbound conversation or campaign, use a Meta-approved template and documented customer consent.</p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto pr-1">
                 {filteredTemplates.length === 0 ? (
                   <div className="col-span-2 text-center p-12 bg-slate-50 rounded-2xl border border-slate-150 text-slate-500 text-xs font-medium">
@@ -1381,7 +1358,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                             className="px-3 py-1.5 bg-teal-650 hover:bg-teal-700 text-white rounded-lg text-[10px] font-extrabold flex items-center gap-1 transition-all cursor-pointer shadow-3xs"
                           >
                             <Megaphone className="h-3.5 w-3.5" />
-                            Bulk Broadcast
+                            Plan campaign
                           </button>
 
                           <button
@@ -1431,7 +1408,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                   <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
                     <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                       <span className="bg-teal-150 text-teal-800 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black">1</span>
-                      Select Broadcast Message Template
+                      Select Campaign Template
                     </h3>
                     <span className="text-[10px] text-slate-400 font-bold">Matched with current industry</span>
                   </div>
@@ -1584,17 +1561,17 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                 <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-3xs space-y-4">
                   <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-200 pb-2.5">
                     <span className="bg-teal-150 text-teal-800 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black">3</span>
-                    Meta Cloud API Billing Calculation
+                    Campaign budget estimate
                   </h3>
 
                   <div className="bg-teal-950/5 border border-teal-200/60 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5 text-[11px] font-black text-teal-800 uppercase tracking-wider">
                         <span className="h-2 w-2 rounded-full bg-teal-600 animate-pulse"></span>
-                        Est. Meta Conversation Cost
+                        Planning estimate only
                       </div>
                       <p className="text-[10px] text-slate-500 max-w-sm font-medium">
-                        Meta bills business-initiated template conversations in India at a rate of approximately <strong className="text-teal-800">₹0.67 ($0.008 USD)</strong> per message sequence.
+                        Use this only to plan a future campaign. Actual Meta pricing depends on the recipient country, message category, and your current commercial terms.
                       </p>
                     </div>
 
@@ -1610,7 +1587,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                   <div className="bg-amber-50 border border-amber-250 p-3.5 rounded-xl flex gap-2.5">
                     <AlertCircle className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
                     <p className="text-[10px] text-amber-850 leading-relaxed font-semibold">
-                      <strong>Important:</strong> Ensure your Business Manager Credit Line or pre-paid billing balance has sufficient funds before triggering this campaign. Dispatched notifications will incur conversation-based charges immediately upon broadcast.
+                      <strong>Safe by design:</strong> This screen prepares a campaign draft only. It cannot deliver messages, create Meta charges, or bypass the recipient consent and approved-template checks needed for a real campaign.
                     </p>
                   </div>
                 </div>
@@ -1665,7 +1642,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                 <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-3xs space-y-4">
                   <h3 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-200 pb-2.5">
                     <Zap className="h-4 w-4 text-amber-500" />
-                    Live Dispatches Console
+                    Campaign readiness
                   </h3>
 
                   {/* Action buttons */}
@@ -1678,7 +1655,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                         className="w-full py-3 bg-teal-650 hover:bg-teal-700 text-white font-black text-xs rounded-xl shadow-3xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <Megaphone className="h-4 w-4" />
-                        Confirm & Trigger Broadcast
+                        Review campaign readiness
                       </button>
                     ) : (
                       <div className="space-y-4">
@@ -1689,10 +1666,10 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                               {isBroadcasting ? (
                                 <>
                                   <RefreshCw className="h-3.5 w-3.5 animate-spin text-teal-650" />
-                                  Broadcasting sequence...
+                                  Preparing campaign draft...
                                 </>
                               ) : (
-                                <span className="text-emerald-600 font-black">✓ Sequence Completed</span>
+                                <span className="text-emerald-600 font-black">✓ Draft ready for review</span>
                               )}
                             </span>
                             <span>{broadcastProgress}%</span>
@@ -1704,7 +1681,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
 
                         {/* Console logs output */}
                         <div className="space-y-1">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Console Data Stream</span>
+                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Campaign preflight notes</span>
                           <div className="bg-slate-900 text-slate-200 font-mono text-[9px] p-3 rounded-xl max-h-[140px] overflow-y-auto space-y-1 text-left leading-relaxed">
                             {broadcastLogs.map((l, index) => (
                               <div key={index} className={l.includes('[SUCCESS]') ? 'text-emerald-400' : l.includes('[ERROR]') ? 'text-rose-400 font-bold' : ''}>
@@ -1717,9 +1694,9 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                         {broadcastComplete && (
                           <div className="bg-emerald-50 border border-emerald-250 p-4 rounded-xl text-center space-y-1 animate-fade-in">
                             <div className="text-xl">🎉</div>
-                            <h4 className="text-xs font-black text-emerald-800 uppercase tracking-wider">Campaign Completed!</h4>
+                            <h4 className="text-xs font-black text-emerald-800 uppercase tracking-wider">Campaign draft ready</h4>
                             <p className="text-[10px] text-slate-500 leading-normal font-semibold">
-                              Matched profiles were sent personalizations via the live Meta Business channel, and interactions were auto-registered in your timeline.
+                              No messages were sent. The list and copy are ready for a later, compliant campaign send once approved Meta templates, consent records, and server-side queueing are enabled.
                             </p>
                             <button
                               type="button"
@@ -1730,7 +1707,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                               }}
                               className="mt-2 text-[10px] font-extrabold text-teal-700 hover:text-teal-900 transition-colors underline block mx-auto cursor-pointer"
                             >
-                              Run Another Broadcast
+                              Prepare another draft
                             </button>
                           </div>
                         )}
@@ -1751,8 +1728,8 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                     <ShieldAlert className="h-5 w-5" />
                   </div>
                   <div>
-                    <h3 className="font-extrabold text-slate-800 text-sm tracking-tight">Meta Cloud API Broadcast Confirmation</h3>
-                    <p className="text-[11px] text-slate-400 font-medium">Please review campaign billing usage and active targets before dispatch.</p>
+                    <h3 className="font-extrabold text-slate-800 text-sm tracking-tight">Campaign preflight</h3>
+                    <p className="text-[11px] text-slate-400 font-medium">Review the audience and copy. This action creates a safe draft only.</p>
                   </div>
                 </div>
 
@@ -1770,11 +1747,11 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                     <span className="font-mono text-slate-850 font-extrabold text-sm">{selectedBroadcastContacts.length} active profiles</span>
                   </div>
                   <div className="flex justify-between items-center py-1.5 border-b border-slate-150">
-                    <span className="font-bold">Estimated Rate per Contact:</span>
+                    <span className="font-bold">Planning estimate per contact:</span>
                     <span className="font-mono text-slate-500 font-semibold text-[10px]">~$0.008 USD (~₹0.67 INR)</span>
                   </div>
                   <div className="flex justify-between items-center py-2 bg-rose-50/50 border border-rose-100 px-3 rounded-lg">
-                    <span className="font-extrabold text-rose-900">Est. Total Meta Billing:</span>
+                    <span className="font-extrabold text-rose-900">Illustrative total:</span>
                     <div className="text-right">
                       <span className="font-mono text-rose-750 font-extrabold text-base block">${totalCostEstimate.toFixed(3)} USD</span>
                       <span className="text-[9px] text-rose-500 font-bold block">~₹{(totalCostEstimate * 83).toFixed(2)} INR</span>
@@ -1785,7 +1762,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                 <div className="bg-amber-50 border border-amber-200/80 p-3.5 rounded-xl flex gap-2.5">
                   <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-[10px] text-amber-850 leading-relaxed font-semibold">
-                    <strong>Notice:</strong> This promotion is armed to dispatch instantly via the LIVE Meta Business Cloud API. Once triggered, message dispatches cannot be aborted and conversation-based charges will accumulate on your Meta Business Suite billing account immediately.
+                    <strong>Safe mode:</strong> This action will not contact anyone. It only records a campaign preflight in this browser so you can review the copy, audience, consent, and approved Meta template before a future server-backed dispatch.
                   </p>
                 </div>
 
@@ -1795,7 +1772,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                     onClick={() => setShowBroadcastConfirmModal(false)}
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-250 text-slate-700 hover:text-slate-900 rounded-xl font-bold text-xs transition-colors cursor-pointer"
                   >
-                    Cancel, Refine List
+                    Cancel
                   </button>
                   <button
                     type="button"
@@ -1803,7 +1780,7 @@ export const WhatsAppAutomationHub: React.FC<WhatsAppAutomationHubProps> = ({
                     className="px-5 py-2 bg-teal-650 hover:bg-teal-700 text-white font-black text-xs rounded-xl shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Megaphone className="h-3.5 w-3.5" />
-                    Yes, Dispatch Campaign
+                    Create campaign draft
                   </button>
                 </div>
               </div>
