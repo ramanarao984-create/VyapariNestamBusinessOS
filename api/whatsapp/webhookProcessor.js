@@ -22,16 +22,17 @@ export function extractWebhookEvents(payload) {
   const events = [];
   for (const entry of payload.entry) for (const change of Array.isArray(entry.changes) ? entry.changes : []) {
     if (change?.field !== 'messages') continue;
+    const wabaId = String(entry?.id || '').trim();
     const value = change.value || {};
     const phoneNumberId = String(value.metadata?.phone_number_id || '').trim();
     if (!phoneNumberId) continue;
     const contacts = Array.isArray(value.contacts) ? value.contacts : [];
     for (const message of Array.isArray(value.messages) ? value.messages : []) {
       if (!message?.id || !message?.from) continue;
-      events.push({ kind: 'message', phoneNumberId, message, contact: contacts.find((c) => c?.wa_id === message.from) || contacts[0] || null });
+      events.push({ kind: 'message', phoneNumberId, wabaId, message, contact: contacts.find((c) => c?.wa_id === message.from) || contacts[0] || null });
     }
     for (const status of Array.isArray(value.statuses) ? value.statuses : []) {
-      if (status?.id && status?.status) events.push({ kind: 'status', phoneNumberId, status });
+      if (status?.id && status?.status) events.push({ kind: 'status', phoneNumberId, wabaId, status });
     }
   }
   return events;
@@ -82,6 +83,21 @@ async function saveMessage(database, tenantId, event) {
   if (saved.error) throw saved.error;
   await database.from('whatsapp_conversations').update({ last_message_at: now, updated_at: now, contact_name: name })
     .eq('tenant_id', tenantId).eq('id', conversation.id);
+
+  // Every inbound customer message opens a fresh 24-hour customer-service window.
+  // The operator UI and the send endpoint both rely on this durable record.
+  const inboundAt = timestamp(event.message.timestamp);
+  const expiresAt = new Date(new Date(inboundAt).getTime() + 24 * 60 * 60 * 1000).toISOString();
+  const window = await database.from('whatsapp_conversation_windows').upsert({
+    id: `window_${hash(`${tenantId}:${conversation.id}`)}`,
+    tenant_id: tenantId,
+    conversation_id: conversation.id,
+    last_inbound_at: inboundAt,
+    window_expires_at: expiresAt,
+    created_at: now,
+    updated_at: now,
+  }, { onConflict: 'tenant_id,conversation_id' });
+  if (window.error) throw window.error;
 }
 export async function processWebhookPayload(payload) {
   const events = extractWebhookEvents(payload);

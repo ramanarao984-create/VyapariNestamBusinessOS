@@ -103,9 +103,7 @@ export class InboxService {
         query = query.is('assigned_user_id', null);
       } else if (viewFilter === 'assigned') {
         query = query.not('assigned_user_id', 'is', null);
-      } else if (viewFilter === 'assigned') {
-            fbQuery = fbQuery.not('assigned_user_id', 'is', null);
-          } else if (viewFilter === 'assigned_to_me' && currentUserId) {
+      } else if (viewFilter === 'assigned_to_me' && currentUserId) {
         query = query.eq('assigned_user_id', currentUserId);
       } else if (viewFilter === 'handover_required') {
         query = query.eq('is_handover_required', true);
