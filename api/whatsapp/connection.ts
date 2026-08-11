@@ -276,6 +276,57 @@ async function serveMessages(identity: { uid: string; tenantId: string }, req: a
   return res.status(200).json(data || []);
 }
 
+async function serveTemplates(identity: { uid: string; tenantId: string }, req: any, res: any) {
+  const db = getDb();
+  if (req.method === 'GET') {
+    const { data, error } = await db.from('whatsapp_templates')
+      .select('id, name, language, category, status, components, updated_at')
+      .eq('tenant_id', identity.tenantId).eq('status', 'APPROVED').order('name').limit(100);
+    if (error) throw error;
+    return res.status(200).json({ items: data || [] });
+  }
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { data: connection, error: connectionError } = await db.from('whatsapp_connections')
+    .select('waba_id, token_ciphertext, connection_status').eq('tenant_id', identity.tenantId).maybeSingle();
+  if (connectionError) throw connectionError;
+  if (!connection?.waba_id || !connection?.token_ciphertext || connection.connection_status !== 'connected') {
+    return res.status(409).json({ error: { code: 'CONNECTION_NOT_ACTIVE', message: 'Save an active WhatsApp Cloud API connection before syncing templates.' } });
+  }
+
+  const response = await fetch('https://graph.facebook.com/' + (process.env.META_GRAPH_API_VERSION || 'v25.0') + '/' +
+    encodeURIComponent(connection.waba_id) + '/message_templates?fields=name,language,status,category,components&limit=250', {
+    headers: { Authorization: 'Bearer ' + decrypt(connection.token_ciphertext) },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error('Meta template sync rejected.', { status: response.status, code: payload?.error?.code });
+    return res.status(422).json({ error: { code: 'META_TEMPLATE_SYNC_FAILED', message: String(payload?.error?.message || 'Meta rejected the template sync.') } });
+  }
+
+  const now = new Date().toISOString();
+  const rows = (Array.isArray(payload?.data) ? payload.data : [])
+    .filter((template: any) => template?.name && template?.language)
+    .map((template: any) => ({
+      id: 'tmpl_' + crypto.createHash('sha256').update(identity.tenantId + ':' + template.name + ':' + template.language).digest('hex').slice(0, 30),
+      tenant_id: identity.tenantId,
+      name: String(template.name),
+      language: String(template.language),
+      category: String(template.category || 'UTILITY'),
+      status: String(template.status || 'PENDING'),
+      components: Array.isArray(template.components) ? template.components : [],
+      updated_at: now,
+    }));
+  if (rows.length) {
+    const { error } = await db.from('whatsapp_templates').upsert(rows, { onConflict: 'tenant_id,name,language' });
+    if (error) throw error;
+  }
+  return serveTemplates(identity, { method: 'GET' }, res);
+}
+
 function outboundFail(res: any, status: number, code: string, message: string) {
   return res.status(status).json({ success: false, error: message, errorCode: code });
 }
@@ -287,13 +338,21 @@ async function serveSend(identity: { uid: string; tenantId: string }, req: any, 
   const messageType = String(req.body?.messageType || 'text');
   const templateName = String(req.body?.templateName || '').trim();
   const templateLanguage = String(req.body?.templateLanguage || 'en_US').trim() || 'en_US';
+  const templateComponents = Array.isArray(req.body?.templateComponents) ? req.body.templateComponents : [];
   const contactName = String(req.body?.contactName || '').trim().slice(0, 100);
   const suppliedConversationId = String(req.body?.conversationId || '').trim();
   if (!/^\d{8,15}$/.test(recipient)) return outboundFail(res, 400, 'INVALID_RECIPIENT', 'Enter a valid WhatsApp number with country code, for example 919087779869.');
   if (!['text', 'template'].includes(messageType)) return outboundFail(res, 400, 'UNSUPPORTED_MESSAGE_TYPE', 'Only text and approved template messages are supported here.');
   if (messageType === 'text' && (!message || message.length > 4096)) return outboundFail(res, 400, 'INVALID_MESSAGE_BODY', 'Text messages must contain between 1 and 4096 characters.');
   if (messageType === 'template' && !/^[a-z0-9_]{1,512}$/i.test(templateName)) return outboundFail(res, 400, 'INVALID_TEMPLATE', 'Choose an approved WhatsApp template before sending the first message.');
+  if (templateComponents.some((component: any) => !component || typeof component !== 'object')) return outboundFail(res, 400, 'INVALID_TEMPLATE_COMPONENTS', 'Template parameters are invalid.');
   const db = getDb();
+  if (messageType === 'template') {
+    const { data: template, error: templateError } = await db.from('whatsapp_templates')
+      .select('id').eq('tenant_id', identity.tenantId).eq('name', templateName).eq('language', templateLanguage).eq('status', 'APPROVED').maybeSingle();
+    if (templateError) throw templateError;
+    if (!template) return outboundFail(res, 409, 'TEMPLATE_NOT_SYNCED', 'Sync and select an approved Meta template before sending it.');
+  }
   const { data: connection, error: connectionError } = await db.from('whatsapp_connections')
     .select('id, phone_number_id, token_ciphertext, connection_status').eq('tenant_id', identity.tenantId).maybeSingle();
   if (connectionError) throw connectionError;
@@ -330,7 +389,7 @@ async function serveSend(identity: { uid: string; tenantId: string }, req: any, 
     conversation = data;
   }
   const payload = messageType === 'template'
-    ? { messaging_product: 'whatsapp', to: recipient, type: 'template', template: { name: templateName, language: { code: templateLanguage } } }
+    ? { messaging_product: 'whatsapp', to: recipient, type: 'template', template: { name: templateName, language: { code: templateLanguage }, ...(templateComponents.length ? { components: templateComponents } : {}) } }
     : { messaging_product: 'whatsapp', to: recipient, type: 'text', text: { body: message } };
   const response = await fetch('https://graph.facebook.com/' + (process.env.META_GRAPH_API_VERSION || 'v25.0') + '/' + connection.phone_number_id + '/messages',
     { method: 'POST', headers: { Authorization: 'Bearer ' + decrypt(connection.token_ciphertext), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -352,9 +411,15 @@ export default async function handler(req: any, res: any) {
 
   try {
     const whatsappRoute = String(req.query?.whatsappRoute || '');
+    if (['inbox', 'messages', 'send', 'templates'].includes(whatsappRoute)) {
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Vary', 'Authorization');
+    }
     if (whatsappRoute === 'inbox') return await serveInbox(identity, req, res);
     if (whatsappRoute === 'messages') return await serveMessages(identity, req, res);
     if (whatsappRoute === 'send') return await serveSend(identity, req, res);
+    if (whatsappRoute === 'templates') return await serveTemplates(identity, req, res);
     if (req.method === 'GET') return res.status(200).json(await readConnection(identity.tenantId));
 
     if (req.method === 'PUT') {
