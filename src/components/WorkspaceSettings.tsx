@@ -1184,7 +1184,7 @@ export const WorkspaceSettings: React.FC<WorkspaceSettingsProps> = ({
                         type="text"
                         value={metaVerifyToken}
                         onChange={(e) => onMetaVerifyTokenChange(e.target.value)}
-                        placeholder={storedVerifyTokenMask ? 'Stored securely on server (enter only to replace)' : 'e.g. nestam_crm_secure_token'}
+                        placeholder={storedVerifyTokenMask ? 'Stored securely on server (enter only to replace)' : 'Enter your Meta webhook verify token'}
                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-xl text-xs focus:outline-none text-slate-700 font-mono transition-colors"
                       />
                       <p className="text-[9px] text-slate-400 mt-1">
