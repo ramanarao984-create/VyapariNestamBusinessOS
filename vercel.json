@@ -22,6 +22,20 @@
       ]
     }
   ],
+  "rewrites": [
+    {
+      "source": "/api/whatsapp/inbox",
+      "destination": "/api/whatsapp/connection?whatsappRoute=inbox"
+    },
+    {
+      "source": "/api/whatsapp/messages",
+      "destination": "/api/whatsapp/connection?whatsappRoute=messages"
+    },
+    {
+      "source": "/api/whatsapp/send",
+      "destination": "/api/whatsapp/connection?whatsappRoute=send"
+    }
+  ],
   "crons": [
     {
       "path": "/api/internal/automation/process-due",
