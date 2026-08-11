@@ -597,7 +597,7 @@ export default function App() {
   const [metaPhoneNumberId, setMetaPhoneNumberId] = useState('');
   const [metaAccessToken, setMetaAccessToken] = useState('');
   const [metaWabaId, setMetaWabaId] = useState('');
-  const [metaVerifyToken, setMetaVerifyToken] = useState('nestam_crm_secure_token');
+  const [metaVerifyToken, setMetaVerifyToken] = useState('');
 
   // Lifted AI Agent configurations
   const [aiAgentActive, setAiAgentActive] = useState<boolean>(() => {
