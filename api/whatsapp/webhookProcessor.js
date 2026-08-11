@@ -82,6 +82,21 @@ async function saveMessage(database, tenantId, event) {
   if (saved.error) throw saved.error;
   await database.from('whatsapp_conversations').update({ last_message_at: now, updated_at: now, contact_name: name })
     .eq('tenant_id', tenantId).eq('id', conversation.id);
+
+  // Every inbound customer message opens a fresh 24-hour customer-service window.
+  // The operator UI and the send endpoint both rely on this durable record.
+  const inboundAt = timestamp(event.message.timestamp);
+  const expiresAt = new Date(new Date(inboundAt).getTime() + 24 * 60 * 60 * 1000).toISOString();
+  const window = await database.from('whatsapp_conversation_windows').upsert({
+    id: `window_${hash(`${tenantId}:${conversation.id}`)}`,
+    tenant_id: tenantId,
+    conversation_id: conversation.id,
+    last_inbound_at: inboundAt,
+    window_expires_at: expiresAt,
+    created_at: now,
+    updated_at: now,
+  }, { onConflict: 'tenant_id,conversation_id' });
+  if (window.error) throw window.error;
 }
 export async function processWebhookPayload(payload) {
   const events = extractWebhookEvents(payload);
