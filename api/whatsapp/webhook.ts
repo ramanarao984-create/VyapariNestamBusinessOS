@@ -95,6 +95,19 @@ export default async function handler(req: any, res: any) {
       }
 
       const result = await processWebhookPayload(payload);
+      // Operational telemetry only: never write sender, token, or message content to logs.
+      console.info('WhatsApp webhook processed.', {
+        received: result.received,
+        processed: result.processed,
+        duplicates: result.duplicates,
+        ignored: result.ignored,
+      });
+      if (result.received > 0 && result.processed === 0 && result.ignored > 0) {
+        console.warn('WhatsApp webhook event was ignored because no saved connection matched its phone number ID.', {
+          received: result.received,
+          ignored: result.ignored,
+        });
+      }
       return res.status(200).json({ status: 'processed', ...result });
     } catch (error: any) {
       const code = error?.code || 'WHATSAPP_WEBHOOK_PROCESSING_FAILED';
