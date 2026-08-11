@@ -312,19 +312,22 @@ async function serveSend(identity: { uid: string; tenantId: string }, req: any, 
     conversation = data;
   }
   const now = new Date().toISOString();
+  // Do the 24-hour policy check before creating a new chat. A rejected
+  // free-text first message must not leave a misleading empty contact behind.
+  const conversationIdForPolicy = conversation?.id || 'conv_' + identity.tenantId + '_' + recipient;
+  if (messageType === 'text') {
+    const { data: window, error: windowError } = await db.from('whatsapp_conversation_windows').select('window_expires_at')
+      .eq('tenant_id', identity.tenantId).eq('conversation_id', conversationIdForPolicy).maybeSingle();
+    if (windowError) throw windowError;
+    if (!window?.window_expires_at || new Date(window.window_expires_at).getTime() <= Date.now()) return outboundFail(res, 409, 'TEMPLATE_REQUIRED', 'WhatsApp allows free-text replies only within 24 hours after the customer messages you. Ask this contact to message your business number first, or send an approved template.');
+  }
   if (!conversation) {
-    const candidate = { id: 'conv_' + identity.tenantId + '_' + recipient, tenant_id: identity.tenantId, external_contact_identifier: recipient,
+    const candidate = { id: conversationIdForPolicy, tenant_id: identity.tenantId, external_contact_identifier: recipient,
       contact_name: contactName || 'New contact', status: 'open', automation_mode: 'ai_active', last_message_at: now, created_at: now, updated_at: now };
     const { data, error } = await db.from('whatsapp_conversations').upsert(candidate, { onConflict: 'tenant_id,external_contact_identifier' })
       .select('id, external_contact_identifier, contact_name').single();
     if (error) throw error;
     conversation = data;
-  }
-  if (messageType === 'text') {
-    const { data: window, error: windowError } = await db.from('whatsapp_conversation_windows').select('window_expires_at')
-      .eq('tenant_id', identity.tenantId).eq('conversation_id', conversation.id).maybeSingle();
-    if (windowError) throw windowError;
-    if (!window?.window_expires_at || new Date(window.window_expires_at).getTime() <= Date.now()) return outboundFail(res, 409, 'TEMPLATE_REQUIRED', 'WhatsApp allows free-text replies only within 24 hours after the customer messages you. Ask this contact to message your business number first, or send an approved template.');
   }
   const payload = messageType === 'template'
     ? { messaging_product: 'whatsapp', to: recipient, type: 'template', template: { name: templateName, language: { code: templateLanguage } } }
