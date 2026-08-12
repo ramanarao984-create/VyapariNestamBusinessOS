@@ -979,7 +979,7 @@ export default function App() {
           patientPhone: contact.phone,
           patientId: contact.id,
           treatment: appointmentTitle,
-          time: `${sugg.time} - ${new Date(endDate).toTimeString().slice(0, 5)}`,
+          time: `${sugg.time} - ${endDate.toTimeString().slice(0, 5)}`,
           date: sugg.date,
           status: 'Confirmed',
           type: 'confirmed',
