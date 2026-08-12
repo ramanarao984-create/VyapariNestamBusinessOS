@@ -960,23 +960,50 @@ export default function App() {
         const sugg = data.schedulingSuggestion;
         console.log(`[🤖 Autopilot] AI suggests booking an appointment:`, sugg);
         
-        // Let's create the local task & auto reminder automatically!
+        // Validate the model output before creating any operational records.
         const startIso = `${sugg.date}T${sugg.time}:00`;
         const startDate = new Date(startIso);
+        if (Number.isNaN(startDate.getTime()) || startDate.getTime() <= Date.now()) {
+          throw new Error('AI proposed an invalid or past appointment time. A staff member must confirm a new slot.');
+        }
         const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+        const appointmentTitle = sugg.summary || `Appointment - ${contact.name}`;
+        const appointmentId = `apt-ai-${Date.now()}`;
+        const primaryDoctor = doctors[0];
 
-        // Fallback local calendar task
+        const bookedAppointment: Appointment = {
+          id: appointmentId,
+          docId: primaryDoctor?.id || 'unassigned',
+          doctorName: primaryDoctor?.name || 'Unassigned',
+          patientName: contact.name,
+          patientPhone: contact.phone,
+          patientId: contact.id,
+          treatment: appointmentTitle,
+          time: `${sugg.time} - ${new Date(endDate).toTimeString().slice(0, 5)}`,
+          date: sugg.date,
+          status: 'Confirmed',
+          type: 'confirmed',
+          notes: `Created by AI Autopilot. ${sugg.description || ''}`.trim(),
+        };
+        setAppointments(prev => [bookedAppointment, ...prev]);
+
         const localTask: UpcomingFollowUp = {
           id: `local-task-${Date.now()}`,
           contactId: contact.id,
           contactName: contact.name,
           contactPhone: contact.phone,
-          summary: sugg.summary || `Appointment - ${contact.name}`,
-          description: sugg.description || 'Dental checkup',
+          summary: appointmentTitle,
+          description: sugg.description || 'Appointment follow-up',
           start: startDate.toISOString(),
           end: endDate.toISOString(),
         };
         setCalendarFollowUps(prev => [localTask, ...prev]);
+
+        AutomationService.triggerEventAsync({
+          triggerType: 'appointment_created',
+          contact: { name: contact.name, phone: contact.phone },
+          appointment: bookedAppointment,
+        }).catch(err => console.warn('AI appointment automation trigger failed', err));
 
         // Automatically register a ScheduledReminder for this appointment!
         const autoReminder: ScheduledReminder = {
@@ -985,12 +1012,12 @@ export default function App() {
           contactName: contact.name,
           contactPhone: contact.phone,
           contactEmail: contact.email,
-          title: sugg.summary || 'AI Auto-Booked Visit',
+          title: appointmentTitle,
           scheduledTime: startIso,
           reminderType: contact.email ? 'Both' : 'WhatsApp',
           message: `Hi ${contact.name}, this is an automated reminder for your upcoming appointment "${sugg.summary || 'visit'}" scheduled on ${sugg.date} at ${sugg.time}. Looking forward to seeing you!`,
           status: 'Scheduled',
-          triggerOffsetMinutes: 0,
+          triggerOffsetMinutes: 60,
           createdAt: new Date().toISOString(),
         };
         setScheduledReminders(prev => [autoReminder, ...prev]);
