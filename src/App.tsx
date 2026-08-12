@@ -2106,7 +2106,9 @@ export default function App() {
         'error'
       );
     }
-  }; chatbot interaction turn
+  };
+
+  // Add a new AI chatbot interaction turn
   const handleAddAiChatTurn = (turn: {
     contactId: string;
     prompt: string;
