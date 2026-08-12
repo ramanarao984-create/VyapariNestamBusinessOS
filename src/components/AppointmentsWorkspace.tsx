@@ -338,8 +338,6 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
               ) : (
                 doctors.map(doc => {
                   const badge = getDocColorBadge(doc.color);
-                  const docApptCount = appointments.filter(a => a.docId === doc.id && (!a.date || a.date === selectedDateIso)).length;
-                  
                   return (
                     <div 
                       key={doc.id} 
