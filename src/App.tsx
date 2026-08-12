@@ -775,33 +775,29 @@ export default function App() {
               typesToLog.push('WhatsApp Sent');
               outcomeText += `Automated WhatsApp reminder sent to ${rem.contactPhone}. `;
 
-              // REAL DISPATCH FOR META API MODE:
-              if (whatsappMode === 'meta' && metaPhoneNumberId && metaAccessToken) {
-                const cleanedPhone = rem.contactPhone.replace(/[^0-9]/g, '');
-                fetch(`https://graph.facebook.com/v18.0/${metaPhoneNumberId}/messages`, {
+              // Dispatch through the protected backend; no Meta credential is present in the browser.
+              if (whatsappMode === 'meta') {
+                void authenticatedFetch('/api/whatsapp/send', {
                   method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${metaAccessToken}`,
-                    'Content-Type': 'application/json',
-                  },
+                  headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    messaging_product: "whatsapp",
-                    to: cleanedPhone,
-                    type: "text",
-                    text: { body: rem.message },
+                    recipient: formatWhatsAppPhone(rem.contactPhone),
+                    message: rem.message,
+                    messageType: 'text',
                   }),
                 })
-                .then(async (res) => {
-                  const data = await res.json();
-                  if (res.ok) {
-                    console.log(`[⏰ Auto-Reminder] Real Meta WhatsApp message dispatched to ${rem.contactName}. Msg ID: ${data.messages?.[0]?.id}`);
-                  } else {
-                    console.error(`[⏰ Auto-Reminder] Meta API Error:`, data.error?.message);
-                  }
-                })
-                .catch(err => {
-                  console.error(`[⏰ Auto-Reminder] Network error dispatching Meta message:`, err);
-                });
+                  .then(async (res) => {
+                    if (res.ok) return;
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body.error || 'Secure reminder delivery failed.');
+                  })
+                  .catch((err) => {
+                    console.error('[Auto-Reminder] Secure delivery failed:', err);
+                    setScheduledReminders((current) => current.map((item) =>
+                      item.id === rem.id ? { ...item, status: 'Failed' } : item
+                    ));
+                    setSyncError(`Reminder for ${rem.contactName} needs attention: ${err.message || 'delivery failed'}`);
+                  });
               }
             }
             if (rem.reminderType === 'Email' || rem.reminderType === 'Both') {
@@ -906,7 +902,6 @@ export default function App() {
           aiAgentType: aiAgentTypeRef.current,
           selectedIndustry: selectedIndustryRef.current,
           customSystemPrompt: customSystemPromptRef.current,
-          customApiKey: customApiKeyRef.current,
         })
       });
 
@@ -923,23 +918,21 @@ export default function App() {
 
       console.log(`[🤖 Autopilot] Generated AI reply for ${contact.name}: "${aiReply}"`);
 
-      // Now dispatch the message
-      // 1. Send via WhatsApp (if in live Meta mode)
-      if (whatsappModeRef.current === 'meta' && metaPhoneNumberIdRef.current && metaAccessTokenRef.current) {
-        const cleanedPhone = formatWhatsAppPhone(contact.phone);
-        await fetch(`https://graph.facebook.com/v18.0/${metaPhoneNumberIdRef.current}/messages`, {
+      // Dispatch through the trusted server. The browser never receives a Meta credential.
+      if (whatsappModeRef.current === 'meta') {
+        const sendResponse = await authenticatedFetch('/api/whatsapp/send', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${metaAccessTokenRef.current}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: cleanedPhone,
-            type: "text",
-            text: { body: aiReply },
+            recipient: formatWhatsAppPhone(contact.phone),
+            message: aiReply,
+            messageType: 'text',
           }),
         });
+        if (!sendResponse.ok) {
+          const errorBody = await sendResponse.json().catch(() => ({}));
+          throw new Error(errorBody.error || 'The secure WhatsApp delivery service could not send the AI reply.');
+        }
       }
 
       // 2. Add an outgoing interaction log
@@ -967,23 +960,50 @@ export default function App() {
         const sugg = data.schedulingSuggestion;
         console.log(`[🤖 Autopilot] AI suggests booking an appointment:`, sugg);
         
-        // Let's create the local task & auto reminder automatically!
+        // Validate the model output before creating any operational records.
         const startIso = `${sugg.date}T${sugg.time}:00`;
         const startDate = new Date(startIso);
+        if (Number.isNaN(startDate.getTime()) || startDate.getTime() <= Date.now()) {
+          throw new Error('AI proposed an invalid or past appointment time. A staff member must confirm a new slot.');
+        }
         const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+        const appointmentTitle = sugg.summary || `Appointment - ${contact.name}`;
+        const appointmentId = `apt-ai-${Date.now()}`;
+        const primaryDoctor = doctors[0];
 
-        // Fallback local calendar task
+        const bookedAppointment: Appointment = {
+          id: appointmentId,
+          docId: primaryDoctor?.id || 'unassigned',
+          doctorName: primaryDoctor?.name || 'Unassigned',
+          patientName: contact.name,
+          patientPhone: contact.phone,
+          patientId: contact.id,
+          treatment: appointmentTitle,
+          time: `${sugg.time} - ${endDate.toTimeString().slice(0, 5)}`,
+          date: sugg.date,
+          status: 'Confirmed',
+          type: 'confirmed',
+          notes: `Created by AI Autopilot. ${sugg.description || ''}`.trim(),
+        };
+        setAppointments(prev => [bookedAppointment, ...prev]);
+
         const localTask: UpcomingFollowUp = {
           id: `local-task-${Date.now()}`,
           contactId: contact.id,
           contactName: contact.name,
           contactPhone: contact.phone,
-          summary: sugg.summary || `Appointment - ${contact.name}`,
-          description: sugg.description || 'Dental checkup',
+          summary: appointmentTitle,
+          description: sugg.description || 'Appointment follow-up',
           start: startDate.toISOString(),
           end: endDate.toISOString(),
         };
         setCalendarFollowUps(prev => [localTask, ...prev]);
+
+        AutomationService.triggerEventAsync({
+          triggerType: 'appointment_created',
+          contact: { name: contact.name, phone: contact.phone },
+          appointment: bookedAppointment,
+        }).catch(err => console.warn('AI appointment automation trigger failed', err));
 
         // Automatically register a ScheduledReminder for this appointment!
         const autoReminder: ScheduledReminder = {
@@ -992,12 +1012,12 @@ export default function App() {
           contactName: contact.name,
           contactPhone: contact.phone,
           contactEmail: contact.email,
-          title: sugg.summary || 'AI Auto-Booked Visit',
+          title: appointmentTitle,
           scheduledTime: startIso,
           reminderType: contact.email ? 'Both' : 'WhatsApp',
           message: `Hi ${contact.name}, this is an automated reminder for your upcoming appointment "${sugg.summary || 'visit'}" scheduled on ${sugg.date} at ${sugg.time}. Looking forward to seeing you!`,
           status: 'Scheduled',
-          triggerOffsetMinutes: 0,
+          triggerOffsetMinutes: 60,
           createdAt: new Date().toISOString(),
         };
         setScheduledReminders(prev => [autoReminder, ...prev]);
@@ -2033,19 +2053,18 @@ export default function App() {
     return digits;
   };
 
-  // WhatsApp click-to-chat or direct Meta Cloud API send
+  // WhatsApp click  // WhatsApp click-to-chat or secure server-side Meta Cloud API send.
   const handleSendWhatsApp = async (text: string) => {
     const activeContact = contacts.find(c => c.id === selectedContactId);
-    if (!activeContact) return;
+    if (!activeContact || !text.trim()) return;
 
     const cleanedPhone = formatWhatsAppPhone(activeContact.phone);
-
     const tryOpenUrl = (url: string) => {
       const win = window.open(url, '_blank');
       if (!win || win.closed || typeof win.closed === 'undefined') {
         showAlert(
           'Redirection Blocked / Fallback available',
-          `Your browser or the iframe sandbox blocked the automatic WhatsApp redirection. Don't worry! You can manually open the link using the action button below, or scan the QR Code on the ${activeContact.name} card.`,
+          `Your browser or the iframe sandbox blocked the automatic WhatsApp redirection. You can still open the chat from the action below.`,
           'warning',
           url,
           'Open WhatsApp Chat'
@@ -2053,59 +2072,39 @@ export default function App() {
       }
     };
 
-    if (whatsappMode === 'meta') {
-      if (!metaPhoneNumberId || !metaAccessToken) {
-        showAlert(
-          "Setup Incomplete",
-          "Meta WhatsApp API configurations are incomplete! Please go to the WhatsApp Integration Hub and configure your Phone Number ID and Permanent Access Token. Falling back to WhatsApp Web.",
-          "warning"
-        );
-        const encodedText = encodeURIComponent(text);
-        tryOpenUrl(`https://wa.me/${cleanedPhone}?text=${encodedText}`);
-        return;
+    if (whatsappMode !== 'meta') {
+      tryOpenUrl(`https://wa.me/${cleanedPhone}?text=${encodeURIComponent(text)}`);
+      return;
+    }
+
+    try {
+      const response = await authenticatedFetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: cleanedPhone,
+          message: text.trim(),
+          messageType: 'text',
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Secure WhatsApp delivery failed.');
       }
 
-      try {
-        const response = await fetch(`https://graph.facebook.com/v18.0/${metaPhoneNumberId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${metaAccessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: cleanedPhone,
-            type: "text",
-            text: { body: text },
-          }),
-        });
-
-        const data = await response.json();
-        if (response.ok) {
-          console.log(`Message successfully sent to ${activeContact.name} via Meta Cloud API! Message ID: ${data.messages?.[0]?.id || 'unknown'}`);
-        } else {
-          const errMsg = data.error?.message || response.statusText;
-          showAlert(
-            "Meta API Error",
-            `Meta Cloud API Error: ${errMsg}. Falling back to WhatsApp Web redirection...`,
-            "error"
-          );
-          const encodedText = encodeURIComponent(text);
-          tryOpenUrl(`https://wa.me/${cleanedPhone}?text=${encodedText}`);
-        }
-      } catch (err: any) {
-        showAlert(
-          "Network Error",
-          `Failed to call Meta API: ${err.message}. Falling back to WhatsApp Web redirection...`,
-          "error"
-        );
-        const encodedText = encodeURIComponent(text);
-        tryOpenUrl(`https://wa.me/${cleanedPhone}?text=${encodedText}`);
-      }
-    } else {
-      const encodedText = encodeURIComponent(text);
-      const waUrl = `https://wa.me/${cleanedPhone}?text=${encodedText}`;
-      tryOpenUrl(waUrl);
+      await handleLogInteraction(
+        'WhatsApp Sent',
+        text.trim(),
+        `Delivered through the secure Meta Cloud API gateway. Message ID: ${data.metaMessageId || 'pending'}`
+      );
+      setSyncSuccess(`WhatsApp message sent to ${activeContact.name}.`);
+    } catch (err: any) {
+      showAlert(
+        'Message Not Sent',
+        err.message || 'The secure WhatsApp delivery service could not send this message.',
+        'error'
+      );
     }
   };
 
