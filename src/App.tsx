@@ -906,7 +906,6 @@ export default function App() {
           aiAgentType: aiAgentTypeRef.current,
           selectedIndustry: selectedIndustryRef.current,
           customSystemPrompt: customSystemPromptRef.current,
-          customApiKey: customApiKeyRef.current,
         })
       });
 
@@ -923,23 +922,21 @@ export default function App() {
 
       console.log(`[🤖 Autopilot] Generated AI reply for ${contact.name}: "${aiReply}"`);
 
-      // Now dispatch the message
-      // 1. Send via WhatsApp (if in live Meta mode)
-      if (whatsappModeRef.current === 'meta' && metaPhoneNumberIdRef.current && metaAccessTokenRef.current) {
-        const cleanedPhone = formatWhatsAppPhone(contact.phone);
-        await fetch(`https://graph.facebook.com/v18.0/${metaPhoneNumberIdRef.current}/messages`, {
+      // Dispatch through the trusted server. The browser never receives a Meta credential.
+      if (whatsappModeRef.current === 'meta') {
+        const sendResponse = await authenticatedFetch('/api/whatsapp/send', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${metaAccessTokenRef.current}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: cleanedPhone,
-            type: "text",
-            text: { body: aiReply },
+            recipient: formatWhatsAppPhone(contact.phone),
+            message: aiReply,
+            messageType: 'text',
           }),
         });
+        if (!sendResponse.ok) {
+          const errorBody = await sendResponse.json().catch(() => ({}));
+          throw new Error(errorBody.error || 'The secure WhatsApp delivery service could not send the AI reply.');
+        }
       }
 
       // 2. Add an outgoing interaction log
@@ -2033,19 +2030,18 @@ export default function App() {
     return digits;
   };
 
-  // WhatsApp click-to-chat or direct Meta Cloud API send
+  // WhatsApp click  // WhatsApp click-to-chat or secure server-side Meta Cloud API send.
   const handleSendWhatsApp = async (text: string) => {
     const activeContact = contacts.find(c => c.id === selectedContactId);
-    if (!activeContact) return;
+    if (!activeContact || !text.trim()) return;
 
     const cleanedPhone = formatWhatsAppPhone(activeContact.phone);
-
     const tryOpenUrl = (url: string) => {
       const win = window.open(url, '_blank');
       if (!win || win.closed || typeof win.closed === 'undefined') {
         showAlert(
           'Redirection Blocked / Fallback available',
-          `Your browser or the iframe sandbox blocked the automatic WhatsApp redirection. Don't worry! You can manually open the link using the action button below, or scan the QR Code on the ${activeContact.name} card.`,
+          `Your browser or the iframe sandbox blocked the automatic WhatsApp redirection. You can still open the chat from the action below.`,
           'warning',
           url,
           'Open WhatsApp Chat'
@@ -2053,63 +2049,41 @@ export default function App() {
       }
     };
 
-    if (whatsappMode === 'meta') {
-      if (!metaPhoneNumberId || !metaAccessToken) {
-        showAlert(
-          "Setup Incomplete",
-          "Meta WhatsApp API configurations are incomplete! Please go to the WhatsApp Integration Hub and configure your Phone Number ID and Permanent Access Token. Falling back to WhatsApp Web.",
-          "warning"
-        );
-        const encodedText = encodeURIComponent(text);
-        tryOpenUrl(`https://wa.me/${cleanedPhone}?text=${encodedText}`);
-        return;
-      }
-
-      try {
-        const response = await fetch(`https://graph.facebook.com/v18.0/${metaPhoneNumberId}/messages`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${metaAccessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: cleanedPhone,
-            type: "text",
-            text: { body: text },
-          }),
-        });
-
-        const data = await response.json();
-        if (response.ok) {
-          console.log(`Message successfully sent to ${activeContact.name} via Meta Cloud API! Message ID: ${data.messages?.[0]?.id || 'unknown'}`);
-        } else {
-          const errMsg = data.error?.message || response.statusText;
-          showAlert(
-            "Meta API Error",
-            `Meta Cloud API Error: ${errMsg}. Falling back to WhatsApp Web redirection...`,
-            "error"
-          );
-          const encodedText = encodeURIComponent(text);
-          tryOpenUrl(`https://wa.me/${cleanedPhone}?text=${encodedText}`);
-        }
-      } catch (err: any) {
-        showAlert(
-          "Network Error",
-          `Failed to call Meta API: ${err.message}. Falling back to WhatsApp Web redirection...`,
-          "error"
-        );
-        const encodedText = encodeURIComponent(text);
-        tryOpenUrl(`https://wa.me/${cleanedPhone}?text=${encodedText}`);
-      }
-    } else {
-      const encodedText = encodeURIComponent(text);
-      const waUrl = `https://wa.me/${cleanedPhone}?text=${encodedText}`;
-      tryOpenUrl(waUrl);
+    if (whatsappMode !== 'meta') {
+      tryOpenUrl(`https://wa.me/${cleanedPhone}?text=${encodeURIComponent(text)}`);
+      return;
     }
-  };
 
-  // Add a new AI chatbot interaction turn
+    try {
+      const response = await authenticatedFetch('/api/whatsapp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipient: cleanedPhone,
+          message: text.trim(),
+          messageType: 'text',
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Secure WhatsApp delivery failed.');
+      }
+
+      await handleLogInteraction(
+        'WhatsApp Sent',
+        text.trim(),
+        `Delivered through the secure Meta Cloud API gateway. Message ID: ${data.metaMessageId || 'pending'}`
+      );
+      setSyncSuccess(`WhatsApp message sent to ${activeContact.name}.`);
+    } catch (err: any) {
+      showAlert(
+        'Message Not Sent',
+        err.message || 'The secure WhatsApp delivery service could not send this message.',
+        'error'
+      );
+    }
+  }; chatbot interaction turn
   const handleAddAiChatTurn = (turn: {
     contactId: string;
     prompt: string;
