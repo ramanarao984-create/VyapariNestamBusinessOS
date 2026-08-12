@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Calendar as CalendarIcon, Clock, Users, Plus, ChevronLeft, ChevronRight, 
   Filter, Search, UserCheck, AlertCircle, CheckCircle2, UserPlus, 
@@ -43,6 +43,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
   const [selectedDateIso, setSelectedDateIso] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedDoctorFilter, setSelectedDoctorFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [focusedQueueContactId, setFocusedQueueContactId] = useState<string | null>(null);
 
   // Doctor Modals
   const [isAddDoctorModalOpen, setIsAddDoctorModalOpen] = useState(false);
@@ -175,16 +176,68 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
     ? doctors 
     : doctors.filter(d => d.id === selectedDoctorFilter);
 
-  // Filtered appointments for current date & query
-  const visibleAppointments = appointments.filter(a => {
+  // Every appointment surface derives from these same filtered records.
+  const visibleAppointments = useMemo(() => appointments.filter(a => {
     const matchesDate = !a.date || a.date === selectedDateIso;
     const matchesDoc = selectedDoctorFilter === 'all' || a.docId === selectedDoctorFilter;
-    const matchesSearch = !searchQuery.trim() || 
-      a.patientName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      a.treatment.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (a.doctorName && a.doctorName.toLowerCase().includes(searchQuery.toLowerCase()));
+    const needle = searchQuery.trim().toLowerCase();
+    const matchesSearch = !needle ||
+      a.patientName.toLowerCase().includes(needle) ||
+      a.treatment.toLowerCase().includes(needle) ||
+      (a.doctorName && a.doctorName.toLowerCase().includes(needle));
     return matchesDate && matchesDoc && matchesSearch;
-  });
+  }), [appointments, searchQuery, selectedDateIso, selectedDoctorFilter]);
+
+  const operationalQueue = useMemo(() => {
+    const scheduledContactIds = new Set(
+      visibleAppointments.map((appointment) => appointment.patientId).filter((id): id is string => Boolean(id))
+    );
+    const source = selectedSubTab === 'walkins'
+      ? visibleAppointments.filter((appointment) => appointment.type === 'walkin').map((appointment) =>
+          contacts.find((contact) => contact.id === appointment.patientId || contact.phone === appointment.patientPhone)
+        ).filter((contact): contact is Contact => Boolean(contact))
+      : selectedSubTab === 'followups' || selectedSubTab === 'recalls'
+        ? contacts.filter((contact) => contact.category === 'Follow-up' || contact.category === 'Inactive')
+        : contacts.filter((contact) =>
+            contact.category !== 'Inactive' ||
+            scheduledContactIds.has(contact.id)
+          );
+
+    return source.filter((contact, index, collection) =>
+      collection.findIndex((item) => item.id === contact.id) === index
+    );
+  }, [contacts, selectedSubTab, visibleAppointments]);
+
+  const operationalCounts = useMemo(() => ({
+    calendar: visibleAppointments.length,
+    queue: contacts.filter((contact) => contact.category !== 'Inactive').length,
+    walkins: appointments.filter((appointment) => appointment.date === selectedDateIso && appointment.type === 'walkin').length,
+    followups: contacts.filter((contact) => contact.category === 'Follow-up').length,
+    recalls: contacts.filter((contact) => contact.category === 'Inactive').length,
+    waitlist: contacts.filter((contact) => contact.pipelineStage === 'Inquiry').length,
+    resources: doctors.length,
+  }), [appointments, contacts, doctors.length, selectedDateIso, visibleAppointments.length]);
+
+  const focusQueueContact = (contact: Contact) => {
+    const appointment = appointments.find((item) =>
+      item.patientId === contact.id ||
+      (Boolean(item.patientPhone) && item.patientPhone === contact.phone)
+    );
+
+    setFocusedQueueContactId(contact.id);
+    setSearchQuery(contact.name);
+    if (appointment?.date) setSelectedDateIso(appointment.date);
+    if (appointment?.docId) setSelectedDoctorFilter(appointment.docId);
+    setSelectedSubTab('calendar');
+  };
+
+  const availableSlotsForDoctor = (doctorId: string) => {
+    const bookedSlots = visibleAppointments.filter((appointment) =>
+      appointment.docId === doctorId &&
+      !['Cancelled', 'No-Show', 'Blocked'].includes(appointment.status)
+    ).length;
+    return Math.max(0, timeSlots.length - bookedSlots);
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -228,13 +281,13 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
           {/* Workspace Sub-Tabs */}
           <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs space-y-1">
             {[
-              { id: 'calendar', label: 'Calendar View', icon: CalendarIcon, badge: `${visibleAppointments.length}` },
-              { id: 'queue', label: 'Live Queue', icon: Users, badge: '5' },
-              { id: 'walkins', label: 'Walk-ins', icon: UserPlus, badge: '3' },
-              { id: 'followups', label: 'Follow-ups', icon: CheckCircle2, badge: '12' },
-              { id: 'recalls', label: 'Recalls', icon: Clock, badge: '8' },
-              { id: 'waitlist', label: 'Waitlist', icon: AlertCircle, badge: '2' },
-              { id: 'resources', label: 'Chairs & Equipment', icon: Stethoscope, badge: '4' },
+              { id: 'calendar', label: 'Calendar View', icon: CalendarIcon, badge: operationalCounts.calendar },
+              { id: 'queue', label: 'Live Queue', icon: Users, badge: operationalCounts.queue },
+              { id: 'walkins', label: 'Walk-ins', icon: UserPlus, badge: operationalCounts.walkins },
+              { id: 'followups', label: 'Follow-ups', icon: CheckCircle2, badge: operationalCounts.followups },
+              { id: 'recalls', label: 'Recalls', icon: Clock, badge: operationalCounts.recalls },
+              { id: 'waitlist', label: 'Waitlist', icon: AlertCircle, badge: operationalCounts.waitlist },
+              { id: 'resources', label: 'Chairs & Equipment', icon: Stethoscope, badge: operationalCounts.resources },
             ].map(item => {
               const Icon = item.icon;
               const isActive = selectedSubTab === item.id;
@@ -307,7 +360,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
 
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="px-2 py-0.5 bg-white border border-slate-200 text-slate-700 text-[10px] font-bold rounded-md shadow-3xs">
-                          {docApptCount} Slots
+                          {availableSlotsForDoctor(doc.id)} available
                         </span>
                         
                         {/* Delete Doctor Action */}
@@ -627,24 +680,29 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {contacts.slice(0, 6).map((c, idx) => (
-                  <div key={c.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="font-bold text-xs text-slate-900">{c.name}</p>
-                      <span className="px-2 py-0.5 text-[9px] font-extrabold rounded bg-teal-50 text-teal-700 border border-teal-200">
-                        Queue #{idx + 1}
+                {operationalQueue.length === 0 ? (
+                  <div className="md:col-span-2 lg:col-span-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-xs font-semibold text-slate-500">
+                    No patients match this operational view.
+                  </div>
+                ) : operationalQueue.map((contact, index) => (
+                  <button
+                    type="button"
+                    key={contact.id}
+                    onClick={() => focusQueueContact(contact)}
+                    className={`p-4 rounded-xl border text-left space-y-2 transition-colors ${focusedQueueContactId === contact.id ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-100' : 'border-slate-200 bg-slate-50 hover:border-teal-300'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="min-w-0 break-words font-bold text-xs text-slate-900">{contact.name}</p>
+                      <span className="shrink-0 px-2 py-0.5 text-[9px] font-extrabold rounded bg-teal-50 text-teal-700 border border-teal-200">
+                        Queue #{index + 1}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500">{c.treatmentType || 'General Dental Consultation'}</p>
-                    <p className="text-[10px] font-mono text-slate-400">{c.phone}</p>
-                    
-                    <button
-                      onClick={() => onOpenBookingModal(c)}
-                      className="w-full mt-2 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[11px] font-bold cursor-pointer"
-                    >
-                      Schedule Session 📅
-                    </button>
-                  </div>
+                    <p className="break-words text-[11px] text-slate-500">{contact.treatmentType || 'General Consultation'}</p>
+                    <p className="text-[10px] font-mono text-slate-400">{contact.phone}</p>
+                    <span className="inline-flex w-full justify-center rounded-lg bg-slate-900 py-1.5 text-[11px] font-bold text-white">
+                      View in Calendar
+                    </span>
+                  </button>
                 ))}
               </div>
             </div>
