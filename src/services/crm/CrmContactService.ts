@@ -186,6 +186,46 @@ export class CrmContactService {
     }
   }
 
+  static async updateContact(
+    tenantId: string,
+    contactId: string,
+    changes: Partial<Pick<CrmContactRecord,
+      'name' | 'email' | 'category' | 'notes' | 'treatment_type' | 'treatment_value' |
+      'amount_collected' | 'payment_method' | 'pipeline_stage' | 'photos' | 'ai_autopilot' |
+      'source' | 'metadata' | 'last_contacted_at'
+    >>
+  ): Promise<CrmContactRecord> {
+    const allowed = [
+      'name', 'email', 'category', 'notes', 'treatment_type', 'treatment_value',
+      'amount_collected', 'payment_method', 'pipeline_stage', 'photos', 'ai_autopilot',
+      'source', 'metadata', 'last_contacted_at',
+    ] as const;
+    const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    for (const key of allowed) {
+      if (changes[key] !== undefined) payload[key] = changes[key] as unknown;
+    }
+
+    try {
+      const { data, error } = await getSupabaseClient()
+        .from('crm_contacts')
+        .update(payload)
+        .eq('tenant_id', tenantId)
+        .eq('id', contactId)
+        .select()
+        .maybeSingle();
+      if (error) this.handleError(error, 'updateContact');
+      if (!data) {
+        const missing: any = new Error('Patient does not belong to this workspace.');
+        missing.code = 'CRM_CONTACT_NOT_FOUND';
+        throw missing;
+      }
+      return data as CrmContactRecord;
+    } catch (error: any) {
+      if (error?.code === 'CRM_SCHEMA_NOT_READY' || error?.code === 'CRM_DATABASE_UNAVAILABLE' || error?.code === 'CRM_CONTACT_NOT_FOUND') throw error;
+      this.handleError(error, 'updateContact');
+    }
+  }
+
   static async listContacts(tenantId: string): Promise<CrmContactRecord[]> {
     try {
       const { data, error } = await getSupabaseClient()
