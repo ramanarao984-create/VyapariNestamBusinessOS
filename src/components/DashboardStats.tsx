@@ -480,7 +480,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const totalAppointmentsToday = scheduledCountForDay + simulatedWalkinsForDay;
 
   // Expected Daily Revenue (4th KPI Card)
-  const estimatedWalkinRevenue = 3200;
+  const estimatedWalkinRevenue = 0;
   const activeTodayRevenue = Object.keys(dateAppointments).reduce((sum, time) => {
     const p = getContactForSlot(selectedDate, time);
     return sum + (p?.treatmentValue || 0);
