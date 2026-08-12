@@ -7,6 +7,7 @@ import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Bot, CheckCheck, ChevronDown, MessageCircle, Plus, RefreshCw, Search, Send, Sparkles, X } from 'lucide-react';
 import { authenticatedFetch } from '../auth/apiClient';
 import type { MessageTemplate } from '../types';
+import { compileTemplateText, TemplateCompilationError } from '../utils/templateCompiler';
 
 interface Chat {
   id: string;
@@ -39,13 +40,19 @@ export interface SharedWhatsAppInboxProps {
   currentUserId?: string;
   currentUserRole?: string;
   teamTemplates?: MessageTemplate[];
+  businessName?: string;
+  senderName?: string;
 }
 
 const apiRoute = (route: string, params = '') => '/api/whatsapp/connection?whatsappRoute=' + route + (params ? '&' + params : '');
 const displayTime = (value?: string | null) => value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 const templateNeedsVariables = (template: Template) => JSON.stringify(template.components || []).includes('{{');
 
-export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({ teamTemplates = [] }) => {
+export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({
+  teamTemplates = [],
+  businessName = 'Your Clinic',
+  senderName = 'Clinic Team',
+}) => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -153,6 +160,12 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({ teamTe
           templateLanguage: selectedTemplate?.language,
           conversationId: target ? undefined : selectedChat?.id,
           contactName: target?.contactName || selectedChat?.contact_name,
+          templateContext: {
+            name: target?.contactName || selectedChat?.contact_name || 'Patient',
+            contactName: target?.contactName || selectedChat?.contact_name || 'Patient',
+            businessName,
+            senderName,
+          },
         }),
       });
       const data = await response.json();
@@ -190,14 +203,22 @@ export const SharedWhatsAppInbox: React.FC<SharedWhatsAppInboxProps> = ({ teamTe
   const visibleChats = useMemo(() => chats, [chats]);
   const canSendText = Boolean(selectedChat?.is_24h_window_open);
   const loadTeamSnippet = (template: MessageTemplate) => {
-    const contactName = selectedChat?.contact_name || 'there';
-    const message = template.text
-      .replace(/\{\{name\}\}/g, contactName)
-      .replace(/\{\{contactName\}\}/g, contactName);
-    setComposer(message);
-    setSelectedTemplate(null);
-    setTeamTemplatesOpen(false);
-    setStatus('Team snippet loaded. Review and edit it before sending.');
+    const contactName = selectedChat?.contact_name || 'Patient';
+    try {
+      const message = compileTemplateText(template.text, {
+        name: contactName,
+        contactName,
+        businessName,
+        senderName,
+      });
+      setComposer(message);
+      setSelectedTemplate(null);
+      setTeamTemplatesOpen(false);
+      setStatus('Team snippet loaded. Review and edit it before sending.');
+    } catch (error) {
+      const missing = error instanceof TemplateCompilationError ? error.variables.join(', ') : 'required values';
+      setError(`This template needs ${missing}. Add those values before sending.`);
+    }
   };
 
   return (

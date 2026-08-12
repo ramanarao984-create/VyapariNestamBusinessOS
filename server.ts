@@ -33,6 +33,7 @@ import { APPROVED_MEDICAL_SECTOR_IDS, IndustryType, isApprovedSectorId } from ".
 import { DurableAutomationEngine } from "./src/services/automation/DurableAutomationEngine";
 import { getTrustedTenantId } from "./src/auth/trustedTenant";
 import { CrmContactService, CrmContactRecord } from "./src/services/crm/CrmContactService";
+import { compileTemplateText, containsTemplateVariables, TemplateCompilationError } from "./src/utils/templateCompiler";
 import crypto from 'crypto';
 
 function timingSafeSecretCompare(provided: string, expected: string): boolean {
@@ -941,18 +942,27 @@ app.post("/api/whatsapp/embedded-signup/callback", requireAuthenticatedUser, req
 // 6. Secure Outbound Messaging Endpoint
 app.post("/api/whatsapp/send", requireAuthenticatedUser, requireProductionAccess, requireRole('Owner', 'Admin', 'Doctor', 'Receptionist'), async (req: any, res: any) => {
   const tenantId = req.auth.tenantId;
-  const { recipient, message, messageType, templateName, templateLanguage, templateComponents, mediaUrl, conversationId, contactName } = req.body;
+  const { recipient, message, messageType, templateName, templateLanguage, templateComponents, mediaUrl, conversationId, contactName, templateContext } = req.body;
 
   if (!recipient || (!message && !templateName && !mediaUrl)) {
     return res.status(400).json({ success: false, error: "Missing required fields (recipient, message or templateName or mediaUrl)" });
   }
 
   try {
+    const resolvedContext = {
+      ...(templateContext && typeof templateContext === 'object' ? templateContext : {}),
+      name: templateContext?.name || templateContext?.contactName || contactName || 'Patient',
+      contactName: templateContext?.contactName || contactName || templateContext?.name || 'Patient',
+    };
+    const compiledMessage = typeof message === 'string' && containsTemplateVariables(message)
+      ? compileTemplateText(message, resolvedContext)
+      : message;
+
     const result = await OutboundService.sendMessage({
       tenantId,
       recipientPhone: recipient,
       messageType: messageType || (templateName ? "template" : "text"),
-      textBody: message,
+      textBody: compiledMessage,
       templateName,
       templateLanguage,
       templateComponents,
@@ -968,6 +978,14 @@ app.post("/api/whatsapp/send", requireAuthenticatedUser, requireProductionAccess
 
     return res.json(result);
   } catch (err: any) {
+    if (err instanceof TemplateCompilationError) {
+      return res.status(422).json({
+        success: false,
+        error: 'Message template needs values before it can be sent.',
+        code: err.code,
+        variables: err.variables,
+      });
+    }
     return res.status(500).json({ success: false, error: err.message || "Outbound messaging exception." });
   }
 });
