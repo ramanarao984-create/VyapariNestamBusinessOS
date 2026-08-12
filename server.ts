@@ -343,37 +343,25 @@ const ai = new GoogleGenAI({
 });
 
 // API Route for Dental AI Assistant co-pilot with self-healing retry and model fallbacks
-app.post("/api/ai/chat", requireAuthenticatedUser, async (req, res) => {
-  const { 
-    prompt, 
-    knowledgeBase, 
-    conversationHistory, 
-    patientName, 
-    aiAgentType = "gemini", 
+app.post("/api/ai/chat", requireAuthenticatedUser, requirePermission('ai:chat'), async (req, res) => {
+  const {
+    prompt,
+    knowledgeBase,
+    conversationHistory,
+    patientName,
+    aiAgentType = "gemini",
     selectedIndustry = "dental",
     customSystemPrompt,
-    customApiKey
   } = req.body;
+
+  const todayIso = new Date().toISOString().slice(0, 10);
   
   if (!prompt) {
     return res.status(400).json({ error: "Prompt is required" });
   }
 
-  let activeAiClient = ai;
-  if (customApiKey && customApiKey.trim()) {
-    try {
-      activeAiClient = new GoogleGenAI({
-        apiKey: customApiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-    } catch (keyErr) {
-      console.error("Failed to initialize custom GoogleGenAI client:", keyErr);
-    }
-  }
+  // Provider credentials remain server-managed. Never accept or retain AI API keys from browser requests.
+  const activeAiClient = ai;
 
   let industryTitle = "Dental Clinic";
   let greetingTemplate = "Namaste {{name}} garu... or Dear {{name}} garu...";
@@ -411,7 +399,7 @@ Your objectives are:
 2. **SUGGEST SCHEDULING ACTION**: If the patient's/client's inquiry mentions a date, time, or request to book/schedule/reschedule an appointment or visit (e.g., "tomorrow at 11 AM", "this Wednesday evening", "next week", "can I check the flat on Saturday?"), extract:
    - shouldSchedule: set to true
    - summary: A descriptive title like "Consultation for [Client Name]"
-   - date: YYYY-MM-DD format (Today's date is Monday, July 13, 2026. Use this as reference!)
+   - date: YYYY-MM-DD format (Today's date is ${todayIso}. Interpret relative dates from this value and never invent a booking time when the customer has not clearly provided one.)
    - time: HH:MM format (24 hour, e.g., "11:00" or "17:30")
    - description: Reason for the visit, e.g., "Treatment booking" or "Real estate flat tour"
    Otherwise, if no clear date/time or scheduling request is mentioned, set shouldSchedule to false.
@@ -517,7 +505,7 @@ function generateHeuristicResponse(prompt: string, patientName: string, knowledg
       shouldSchedule = true;
       const day = parseInt(dateMatch[1]);
       const month = parseInt(dateMatch[2]);
-      date = `2026-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+      date = `${new Date().getFullYear()}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     }
   }
 
