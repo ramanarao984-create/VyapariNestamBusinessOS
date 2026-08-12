@@ -234,7 +234,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   // The dashboard is a projection of the shared appointment ledger. Never keep a
   // second dashboard-only calendar; it causes KPI and scheduler drift.
   const appointmentsByDate = React.useMemo((): Record<string, Record<string, string>> => {
-    return appointments.reduce<Record<string, Record<string, string>>>((days, appointment) => {
+    return appointments.reduce((days: Record<string, Record<string, string>>, appointment: Appointment) => {
       if (!appointment.date || appointment.status === 'Cancelled') return days;
       const slot = appointment.time.split(' - ')[0].trim();
       const patientId = appointment.patientId
