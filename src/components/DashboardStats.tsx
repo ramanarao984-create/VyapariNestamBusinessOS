@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Contact, Interaction } from '../types';
+import { Appointment, Contact, Interaction } from '../types';
 import { INDUSTRIES, IndustryType } from '../industryConfig';
 import { 
   Users, 
@@ -40,6 +40,9 @@ import { motion, AnimatePresence } from 'motion/react';
 interface DashboardStatsProps {
   contacts: Contact[];
   interactions: Interaction[];
+  appointments: Appointment[];
+  onAddAppointment?: (appointment: Omit<Appointment, 'id'>) => Promise<void> | void;
+  onDeleteAppointment?: (appointmentId: string) => void;
   upcomingCount: number;
   isSyncing: boolean;
   onSync: () => void;
@@ -59,6 +62,9 @@ interface DashboardStatsProps {
 export const DashboardStats: React.FC<DashboardStatsProps> = ({
   contacts,
   interactions,
+  appointments,
+  onAddAppointment,
+  onDeleteAppointment,
   upcomingCount,
   isSyncing,
   onSync,
@@ -135,9 +141,9 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
   // --- Date and Calendar States ---
   // Default selected date to July 17, 2026 so that Friday, July 17th is instantly viewable
-  const [selectedDate, setSelectedDate] = useState<string>('2026-07-17');
+  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toLocaleDateString('en-CA'));
   // Default calendar month is July 2026
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date(2026, 6, 1));
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
 
   // --- Dynamic Timings Dropdown States ---
   const [timingPreset, setTimingPreset] = useState<string>('standard');
@@ -225,30 +231,19 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     setNewPresetName('');
   };
 
-  // --- Persistent Key-Value Appointments State (Keyed by YYYY-MM-DD) ---
-  const [appointmentsByDate, setAppointmentsByDate] = useState<{ [date: string]: { [time: string]: string } }>(() => {
-    const saved = localStorage.getItem('nestam_appointments_by_date');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // Fallback below
-      }
-    }
-    // Prepopulate July 17th, 2026 with some beautiful custom appointments as requested
-    return {
-      '2026-07-17': {
-        '09:30 AM': 'c-1', // Pre-populated treatment slots
-        '11:00 AM': 'c-2',
-        '02:30 PM': 'c-3',
-      }
-    };
-  });
-
-  // Save to localStorage when appointments modify
-  useEffect(() => {
-    localStorage.setItem('nestam_appointments_by_date', JSON.stringify(appointmentsByDate));
-  }, [appointmentsByDate]);
+  // The dashboard is a projection of the shared appointment ledger. Never keep a
+  // second dashboard-only calendar; it causes KPI and scheduler drift.
+  const appointmentsByDate = React.useMemo((): Record<string, Record<string, string>> => {
+    return appointments.reduce((days: Record<string, Record<string, string>>, appointment: Appointment) => {
+      if (!appointment.date || appointment.status === 'Cancelled') return days;
+      const slot = appointment.time.split(' - ')[0].trim();
+      const patientId = appointment.patientId
+        || contacts.find(contact => contact.phone.replace(/\D/g, '') === (appointment.patientPhone || '').replace(/\D/g, ''))?.id;
+      if (!patientId || !slot) return days;
+      days[appointment.date] = { ...(days[appointment.date] || {}), [slot]: patientId };
+      return days;
+    }, {});
+  }, [appointments, contacts]);
 
   // --- Booking Slot States ---
   const [activeBookingTime, setActiveBookingTime] = useState<string | null>(null);
@@ -356,7 +351,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   // --- Top Row Immediate Appointment Modal State ---
   const [isImmediateBookingOpen, setIsImmediateBookingOpen] = useState(false);
   const [immediateContactId, setImmediateContactId] = useState('');
-  const [immediateDate, setImmediateDate] = useState('2026-07-17');
+  const [immediateDate, setImmediateDate] = useState(() => new Date().toLocaleDateString('en-CA'));
   const [immediateTime, setImmediateTime] = useState('10:00 AM');
   const [immediateNotes, setImmediateNotes] = useState('');
   const [immediateTreatment, setImmediateTreatment] = useState('');
@@ -480,8 +475,8 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
   // --- KPI CALCULATIONS FOR SELECTED DATE ---
   const dateAppointments = appointmentsByDate[selectedDate] || {};
-  const scheduledCountForDay = Object.keys(dateAppointments).length || (selectedDate === '2026-07-17' ? 3 : 0);
-  const simulatedWalkinsForDay = selectedDate === '2026-07-17' ? 2 : 1;
+  const scheduledCountForDay = Object.keys(dateAppointments).length;
+  const simulatedWalkinsForDay = 0;
   const totalAppointmentsToday = scheduledCountForDay + simulatedWalkinsForDay;
 
   // Expected Daily Revenue (4th KPI Card)
@@ -489,13 +484,13 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const activeTodayRevenue = Object.keys(dateAppointments).reduce((sum, time) => {
     const p = getContactForSlot(selectedDate, time);
     return sum + (p?.treatmentValue || 0);
-  }, 0) || (selectedDate === '2026-07-17' ? 24500 : 0);
+  }, 0);
 
   const expectedDailyRevenue = activeTodayRevenue > 0 ? activeTodayRevenue + estimatedWalkinRevenue : estimatedWalkinRevenue;
 
   // Schedule Slot Utilization (2nd KPI Card)
   const totalSlotsCount = timeSlots.length || 8;
-  const filledSlotsCount = Object.keys(dateAppointments).filter(time => timeSlots.includes(time)).length || (selectedDate === '2026-07-17' ? 3 : 0);
+  const filledSlotsCount = Object.keys(dateAppointments).filter(time => timeSlots.includes(time)).length;
   const slotUtilizationRate = Math.round((filledSlotsCount / totalSlotsCount) * 100);
   const emptySlotsCount = Math.max(0, totalSlotsCount - filledSlotsCount);
 
@@ -986,62 +981,61 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     }
   ];
 
-  // Booking handlers
-  const handleBookSlot = (time: string, contactId: string) => {
-    setAppointmentsByDate(prev => {
-      const dayAppts = prev[selectedDate] || {};
-      return {
-        ...prev,
-        [selectedDate]: {
-          ...dayAppts,
-          [time]: contactId
-        }
-      };
+  // Booking handlers dispatch to the same ledger used by the scheduler and KPIs.
+  const handleBookSlot = async (time: string, contactId: string) => {
+    const patient = contacts.find(contact => contact.id === contactId);
+    if (!patient || !onAddAppointment) return;
+    await onAddAppointment({
+      docId: '',
+      doctorName: 'Assigned Specialist',
+      patientId: patient.id,
+      patientName: patient.name,
+      patientPhone: patient.phone,
+      treatment: patient.treatmentType || 'Consultation',
+      time: `${time} - ${time.replace('00', '45')}`,
+      date: selectedDate,
+      status: 'Confirmed',
+      type: 'confirmed'
     });
-
-    const patient = contacts.find(c => c.id === contactId);
-    if (patient) {
-      setBookingSuccessMsg(`Successfully scheduled ${patient.name} for ${time}!`);
-      setTimeout(() => setBookingSuccessMsg(null), 3000);
-    }
+    setBookingSuccessMsg(`Successfully scheduled ${patient.name} for ${time}!`);
+    setTimeout(() => setBookingSuccessMsg(null), 3000);
     setActiveBookingTime(null);
     setBookingSearch('');
   };
 
   const handleCancelBooking = (time: string) => {
-    setAppointmentsByDate(prev => {
-      const dayAppts = { ...(prev[selectedDate] || {}) };
-      delete dayAppts[time];
-      return {
-        ...prev,
-        [selectedDate]: dayAppts
-      };
-    });
-    setBookingSuccessMsg(`Appointment at ${time} cancelled.`);
-    setTimeout(() => setBookingSuccessMsg(null), 3000);
+    const patientId = appointmentsByDate[selectedDate]?.[time];
+    const appointment = appointments.find(item => item.date === selectedDate
+      && item.time.split(' - ')[0].trim() === time
+      && (item.patientId === patientId || !patientId));
+    if (appointment && onDeleteAppointment) {
+      onDeleteAppointment(appointment.id);
+      setBookingSuccessMsg(`Appointment at ${time} cancelled.`);
+      setTimeout(() => setBookingSuccessMsg(null), 3000);
+    }
   };
 
-  const handleImmediateBookingSubmit = (e: React.FormEvent) => {
+  const handleImmediateBookingSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!immediateContactId || !immediateDate || !immediateTime) return;
+    const patient = contacts.find(contact => contact.id === immediateContactId);
+    if (!patient || !immediateDate || !immediateTime || !onAddAppointment) return;
 
-    setAppointmentsByDate(prev => {
-      const dayAppts = prev[immediateDate] || {};
-      return {
-        ...prev,
-        [immediateDate]: {
-          ...dayAppts,
-          [immediateTime]: immediateContactId
-        }
-      };
+    await onAddAppointment({
+      docId: '',
+      doctorName: 'Assigned Specialist',
+      patientId: patient.id,
+      patientName: patient.name,
+      patientPhone: patient.phone,
+      treatment: immediateTreatment || patient.treatmentType || 'Consultation',
+      time: `${immediateTime} - ${immediateTime.replace('00', '45')}`,
+      date: immediateDate,
+      status: 'Confirmed',
+      type: 'confirmed',
+      notes: immediateNotes.trim()
     });
 
-    const patient = contacts.find(c => c.id === immediateContactId);
-    if (patient) {
-      setBookingSuccessMsg(`Successfully scheduled immediate appointment for ${patient.name}!`);
-      setTimeout(() => setBookingSuccessMsg(null), 3500);
-    }
-
+    setBookingSuccessMsg(`Successfully scheduled immediate appointment for ${patient.name}!`);
+    setTimeout(() => setBookingSuccessMsg(null), 3500);
     setIsImmediateBookingOpen(false);
   };
 

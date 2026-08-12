@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Calendar as CalendarIcon, Clock, Users, Plus, ChevronLeft, ChevronRight, 
   Filter, Search, UserCheck, AlertCircle, CheckCircle2, UserPlus, 
@@ -14,7 +14,7 @@ interface AppointmentsWorkspaceProps {
   onAddDoctor: (doc: Omit<Doctor, 'id'>) => void;
   onDeleteDoctor: (id: string) => void;
   onEditDoctor?: (doc: Doctor) => void;
-  onAddAppointment: (apt: Omit<Appointment, 'id'>) => void;
+  onAddAppointment: (apt: Omit<Appointment, 'id'>) => Promise<void> | void;
   onUpdateAppointmentStatus: (id: string, status: Appointment['status'], type: Appointment['type']) => void;
   onDeleteAppointment: (id: string) => void;
   onOpenBookingModal: (contact?: Contact, docId?: string, time?: string) => void;
@@ -36,14 +36,38 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
   onSendWhatsApp,
   businessName = 'Sri Sai Dental Clinic'
 }) => {
-  const [selectedSubTab, setSelectedSubTab] = useState<'calendar' | 'queue' | 'walkins' | 'followups' | 'recalls' | 'waitlist' | 'resources'>('calendar');
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'timeline' | 'agenda'>('day');
-  
-  // Date State - Default to Today ISO string e.g. YYYY-MM-DD
-  const [selectedDateIso, setSelectedDateIso] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [selectedDoctorFilter, setSelectedDoctorFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const readWorkspaceState = () => {
+    try {
+      return JSON.parse(sessionStorage.getItem('nestam_appointments_workspace') || '{}') as Partial<{
+        selectedSubTab: 'calendar' | 'queue' | 'walkins' | 'followups' | 'recalls' | 'waitlist' | 'resources';
+        viewMode: 'day' | 'week' | 'timeline' | 'agenda';
+        selectedDateIso: string;
+        selectedDoctorFilter: string;
+        searchQuery: string;
+      }>;
+    } catch {
+      return {};
+    }
+  };
+  const savedWorkspace = readWorkspaceState();
+  const localToday = new Date().toLocaleDateString('en-CA');
+  const [selectedSubTab, setSelectedSubTab] = useState<'calendar' | 'queue' | 'walkins' | 'followups' | 'recalls' | 'waitlist' | 'resources'>(savedWorkspace.selectedSubTab || 'calendar');
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'timeline' | 'agenda'>(savedWorkspace.viewMode || 'day');
+  const [selectedDateIso, setSelectedDateIso] = useState<string>(savedWorkspace.selectedDateIso || localToday);
+  const [selectedDoctorFilter, setSelectedDoctorFilter] = useState(savedWorkspace.selectedDoctorFilter || 'all');
+  const [searchQuery, setSearchQuery] = useState(savedWorkspace.searchQuery || '');
   const [focusedQueueContactId, setFocusedQueueContactId] = useState<string | null>(null);
+
+  // Returning from another section restores the user's working date, filters, and view.
+  useEffect(() => {
+    sessionStorage.setItem('nestam_appointments_workspace', JSON.stringify({
+      selectedSubTab,
+      viewMode,
+      selectedDateIso,
+      selectedDoctorFilter,
+      searchQuery
+    }));
+  }, [selectedSubTab, viewMode, selectedDateIso, selectedDoctorFilter, searchQuery]);
 
   // Doctor Modals
   const [isAddDoctorModalOpen, setIsAddDoctorModalOpen] = useState(false);
@@ -100,7 +124,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
     const parts = selectedDateIso.split('-');
     const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
     d.setDate(d.getDate() - 1);
-    setSelectedDateIso(d.toISOString().split('T')[0]);
+    setSelectedDateIso(d.toLocaleDateString('en-CA'));
   };
 
   const handleNextDay = () => {
@@ -111,7 +135,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
   };
 
   const handleSetToday = () => {
-    setSelectedDateIso(new Date().toISOString().split('T')[0]);
+    setSelectedDateIso(new Date().toLocaleDateString('en-CA'));
   };
 
   // Add Doctor Handler
@@ -145,7 +169,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
   };
 
   // Save Appointment Handler
-  const handleSaveAppt = (e: React.FormEvent) => {
+  const handleSaveAppt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!apptDocId || !apptPatientName.trim()) {
       setFormError('Choose a doctor and enter the patient name before booking.');
@@ -153,7 +177,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
     }
     setFormError(null);
     const docObj = doctors.find(d => d.id === apptDocId);
-    onAddAppointment({
+    await onAddAppointment({
       docId: apptDocId,
       doctorName: docObj?.name || 'Dr. Assigned',
       patientName: apptPatientName.trim(),
