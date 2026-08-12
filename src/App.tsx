@@ -775,33 +775,29 @@ export default function App() {
               typesToLog.push('WhatsApp Sent');
               outcomeText += `Automated WhatsApp reminder sent to ${rem.contactPhone}. `;
 
-              // REAL DISPATCH FOR META API MODE:
-              if (whatsappMode === 'meta' && metaPhoneNumberId && metaAccessToken) {
-                const cleanedPhone = rem.contactPhone.replace(/[^0-9]/g, '');
-                fetch(`https://graph.facebook.com/v18.0/${metaPhoneNumberId}/messages`, {
+              // Dispatch through the protected backend; no Meta credential is present in the browser.
+              if (whatsappMode === 'meta') {
+                void authenticatedFetch('/api/whatsapp/send', {
                   method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${metaAccessToken}`,
-                    'Content-Type': 'application/json',
-                  },
+                  headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    messaging_product: "whatsapp",
-                    to: cleanedPhone,
-                    type: "text",
-                    text: { body: rem.message },
+                    recipient: formatWhatsAppPhone(rem.contactPhone),
+                    message: rem.message,
+                    messageType: 'text',
                   }),
                 })
-                .then(async (res) => {
-                  const data = await res.json();
-                  if (res.ok) {
-                    console.log(`[⏰ Auto-Reminder] Real Meta WhatsApp message dispatched to ${rem.contactName}. Msg ID: ${data.messages?.[0]?.id}`);
-                  } else {
-                    console.error(`[⏰ Auto-Reminder] Meta API Error:`, data.error?.message);
-                  }
-                })
-                .catch(err => {
-                  console.error(`[⏰ Auto-Reminder] Network error dispatching Meta message:`, err);
-                });
+                  .then(async (res) => {
+                    if (res.ok) return;
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body.error || 'Secure reminder delivery failed.');
+                  })
+                  .catch((err) => {
+                    console.error('[Auto-Reminder] Secure delivery failed:', err);
+                    setScheduledReminders((current) => current.map((item) =>
+                      item.id === rem.id ? { ...item, status: 'Failed' } : item
+                    ));
+                    setSyncError(`Reminder for ${rem.contactName} needs attention: ${err.message || 'delivery failed'}`);
+                  });
               }
             }
             if (rem.reminderType === 'Email' || rem.reminderType === 'Both') {
