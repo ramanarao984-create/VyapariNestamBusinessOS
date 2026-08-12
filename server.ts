@@ -941,7 +941,7 @@ app.post("/api/whatsapp/embedded-signup/callback", requireAuthenticatedUser, req
 // 6. Secure Outbound Messaging Endpoint
 app.post("/api/whatsapp/send", requireAuthenticatedUser, requireProductionAccess, requireRole('Owner', 'Admin', 'Doctor', 'Receptionist'), async (req: any, res: any) => {
   const tenantId = req.auth.tenantId;
-  const { recipient, message, messageType, templateName, templateLanguage, templateComponents, mediaUrl, conversationId } = req.body;
+  const { recipient, message, messageType, templateName, templateLanguage, templateComponents, mediaUrl, conversationId, contactName } = req.body;
 
   if (!recipient || (!message && !templateName && !mediaUrl)) {
     return res.status(400).json({ success: false, error: "Missing required fields (recipient, message or templateName or mediaUrl)" });
@@ -959,6 +959,7 @@ app.post("/api/whatsapp/send", requireAuthenticatedUser, requireProductionAccess
       mediaUrl,
       source: "human",
       conversationId,
+      contactName,
     });
 
     if (!result.success) {
