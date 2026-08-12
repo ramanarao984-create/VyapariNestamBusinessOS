@@ -1,8 +1,8 @@
-import React from 'react';
+import { Component, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface SectionErrorBoundaryProps {
-  children: React.ReactNode;
+  children: ReactNode;
   resetKey: string;
 }
 
@@ -10,7 +10,7 @@ interface SectionErrorBoundaryState {
   hasError: boolean;
 }
 
-export class SectionErrorBoundary extends React.Component<SectionErrorBoundaryProps, SectionErrorBoundaryState> {
+export class SectionErrorBoundary extends Component<SectionErrorBoundaryProps, SectionErrorBoundaryState> {
   state: SectionErrorBoundaryState = { hasError: false };
 
   static getDerivedStateFromError(): SectionErrorBoundaryState {
