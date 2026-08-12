@@ -36,6 +36,7 @@ import { INDUSTRIES, IndustryType, APPROVED_MEDICAL_SECTOR_IDS, getSectorDefinit
 
 import { AuthBar } from './components/AuthBar';
 import { DashboardStats } from './components/DashboardStats';
+import { SectionErrorBoundary } from './components/SectionErrorBoundary';
 import { ContactCard } from './components/ContactCard';
 import { InteractionList } from './components/InteractionList';
 import { TemplateList } from './components/TemplateList';
@@ -368,9 +369,42 @@ export default function App() {
     );
   };
 
-  const handleAddAppointment = (newApt: Omit<Appointment, 'id'>) => {
+  const handleAddAppointment = async (newApt: Omit<Appointment, 'id'>) => {
+    const normalizePhone = (phone?: string) => (phone || '').replace(/\D/g, '').replace(/^0+/, '');
+    const matchingContact = contacts.find(contact =>
+      (newApt.patientId && contact.id === newApt.patientId)
+      || (normalizePhone(newApt.patientPhone) && normalizePhone(contact.phone) === normalizePhone(newApt.patientPhone))
+      || contact.name.trim().toLowerCase() === newApt.patientName.trim().toLowerCase()
+    );
+
+    // A booking must never become an orphan. If reception books an unknown person,
+    // create a lead in the same shared contact state before adding the appointment.
+    let patientId = newApt.patientId || matchingContact?.id;
+    if (!matchingContact && newApt.patientName.trim()) {
+      const provisionalContact: Contact = {
+        id: `PNT-${Date.now()}`,
+        name: newApt.patientName.trim(),
+        phone: newApt.patientPhone?.trim() || '',
+        category: 'Lead',
+        pipelineStage: 'Scheduled',
+        notes: newApt.notes || 'Created while booking an appointment.',
+        lastContacted: 'Never',
+        createdAt: new Date().toISOString(),
+        treatmentType: newApt.treatment
+      };
+      patientId = provisionalContact.id;
+      await handleQuickAddContact(provisionalContact);
+    } else if (matchingContact && matchingContact.pipelineStage !== 'Scheduled') {
+      const updatedContacts = contacts.map(contact =>
+        contact.id === matchingContact.id ? { ...contact, pipelineStage: 'Scheduled' as const } : contact
+      );
+      setContacts(updatedContacts);
+      localStorage.setItem('nestam_contacts_cache', JSON.stringify(updatedContacts));
+    }
+
     const apt: Appointment = {
       ...newApt,
+      patientId,
       id: `apt-${Date.now()}`
     };
     const updated = [apt, ...appointments];
@@ -378,7 +412,6 @@ export default function App() {
     localStorage.setItem('nestam_appointments_list', JSON.stringify(updated));
     setSyncSuccess(`Appointment booked for ${apt.patientName} with ${apt.doctorName || 'Assigned Specialist'}!`);
 
-    // Emit Durable Automation Event
     AutomationService.triggerEventAsync({
       triggerType: 'appointment_created',
       contact: { name: apt.patientName, phone: apt.patientPhone },
@@ -419,7 +452,34 @@ export default function App() {
 
   // Selection states
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'contacts' | 'templates' | 'whatsapp_hub' | 'settings' | 'seo_audit'>('dashboard');
+  type WorkspaceTab = 'dashboard' | 'contacts' | 'templates' | 'whatsapp_hub' | 'settings' | 'seo_audit' | 'appointments' | 'automation';
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(() => {
+    const view = new URLSearchParams(window.location.search).get('view') as WorkspaceTab | null;
+    return view && ['dashboard', 'contacts', 'templates', 'whatsapp_hub', 'settings', 'seo_audit', 'appointments', 'automation'].includes(view) ? view : 'dashboard';
+  });
+
+  const navigateToTab = (tab: WorkspaceTab, contactId?: string) => {
+    setActiveTab(tab);
+    setSelectedContactId(contactId || null);
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', tab);
+    if (contactId) url.searchParams.set('contact', contactId);
+    else url.searchParams.delete('contact');
+    window.history.pushState({}, '', url);
+  };
+
+  useEffect(() => {
+    const restoreFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('view') as WorkspaceTab | null;
+      if (tab && ['dashboard', 'contacts', 'templates', 'whatsapp_hub', 'settings', 'seo_audit', 'appointments', 'automation'].includes(tab)) {
+        setActiveTab(tab);
+      }
+      setSelectedContactId(params.get('contact'));
+    };
+    window.addEventListener('popstate', restoreFromUrl);
+    return () => window.removeEventListener('popstate', restoreFromUrl);
+  }, []);
 
   // Onboarding & SEO states
   const [cityLandmark, setCityLandmark] = useState<string>(() => localStorage.getItem('nestam_city_landmark') || 'Vijayawada');
@@ -2562,9 +2622,13 @@ export default function App() {
         {/* ==================== 1. DASHBOARD VIEW ==================== */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6 animate-fade-in">
+            <SectionErrorBoundary resetKey="dashboard">
             <DashboardStats
               contacts={contacts}
               interactions={interactions}
+              appointments={appointments}
+              onAddAppointment={handleAddAppointment}
+              onDeleteAppointment={handleDeleteAppointment}
               upcomingCount={calendarFollowUps.length}
               isSyncing={isSyncing}
               onSync={handleManualSync}
@@ -2574,23 +2638,19 @@ export default function App() {
               businessName={businessName}
               senderName={senderName}
               cityLandmark={cityLandmark}
-              onNavigateToTab={(tab) => {
-                setActiveTab(tab);
-                if (tab !== 'contacts') {
-                  setSelectedContactId(null);
-                }
-              }}
+              onNavigateToTab={(tab) => navigateToTab(tab as WorkspaceTab)}
               onSelectContactAndChat={(phone) => {
                 const contact = contacts.find(c => c.phone.replace(/[^0-9]/g, '') === phone.replace(/[^0-9]/g, ''));
                 if (contact) {
                   setSelectedContactId(contact.id);
                 }
                 setPatientsSubView('directory');
-                setActiveTab('contacts');
+                navigateToTab('contacts', contact?.id);
               }}
               onSendWhatsAppConfirmation={handleSendWhatsApp}
               onAddContact={handleQuickAddContact}
             />
+            </SectionErrorBoundary>
           </div>
         )}
 
@@ -2617,6 +2677,7 @@ export default function App() {
 
         {/* ==================== 3. APPOINTMENTS & OPERATIONS ==================== */}
         {activeTab === 'appointments' && (
+          <SectionErrorBoundary resetKey="appointments">
           <AppointmentsWorkspace
             contacts={contacts}
             doctors={doctors}
@@ -2630,6 +2691,7 @@ export default function App() {
             onSendWhatsApp={(text) => handleSendWhatsApp(text)}
             businessName={businessName}
           />
+          </SectionErrorBoundary>
         )}
 
         {/* ==================== 4. WHATSAPP INBOX & COMMUNICATIONS ==================== */}
