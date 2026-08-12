@@ -300,6 +300,8 @@ export default function App() {
     return saved ? JSON.parse(saved) : MOCK_INTERACTIONS;
   });
 
+  const patientDirectoryHydratedRef = useRef(false);
+
   const [templates, setTemplates] = useState<MessageTemplate[]>(() => {
     const saved = localStorage.getItem('crm_templates');
     return saved ? JSON.parse(saved) : DEFAULT_TEMPLATES;
@@ -718,6 +720,46 @@ export default function App() {
       localStorage.setItem(`nestam_interactions_${selectedIndustry}`, JSON.stringify(interactions));
     }
   }, [interactions, selectedIndustry]);
+
+  // Hydrate the patient directory and living timeline from the tenant-scoped server record.
+  // Local storage remains an offline cache; it is no longer the only source for WhatsApp-linked patients.
+  useEffect(() => {
+    if (!accessToken || patientDirectoryHydratedRef.current) return;
+    let cancelled = false;
+
+    const refreshPatientDirectory = async () => {
+      try {
+        const [contactsResponse, interactionsResponse] = await Promise.all([
+          authenticatedFetch('/api/crm/contacts'),
+          authenticatedFetch('/api/crm/interactions'),
+        ]);
+        if (!contactsResponse.ok || !interactionsResponse.ok) return;
+        const [contactsPayload, interactionsPayload] = await Promise.all([
+          contactsResponse.json(),
+          interactionsResponse.json(),
+        ]);
+        if (cancelled) return;
+
+        const remoteContacts = Array.isArray(contactsPayload.items) ? contactsPayload.items as Contact[] : [];
+        const remoteInteractions = Array.isArray(interactionsPayload.items) ? interactionsPayload.items as Interaction[] : [];
+        setContacts((current) => {
+          const knownPhones = new Set(remoteContacts.map((contact) => formatWhatsAppPhone(contact.phone)));
+          return [...remoteContacts, ...current.filter((contact) => !knownPhones.has(formatWhatsAppPhone(contact.phone)))];
+        });
+        setInteractions((current) => {
+          const remoteIds = new Set(remoteInteractions.map((interaction) => interaction.id));
+          return [...remoteInteractions, ...current.filter((interaction) => !remoteIds.has(interaction.id))];
+        });
+        patientDirectoryHydratedRef.current = true;
+      } catch (error) {
+        console.warn('Patient directory hydration was unavailable; retaining the local cache.', error);
+      }
+    };
+
+    void refreshPatientDirectory();
+    const timer = window.setInterval(() => { void refreshPatientDirectory(); }, 45000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [accessToken]);
 
   useEffect(() => {
     localStorage.setItem('crm_templates', JSON.stringify(templates));
@@ -1767,8 +1809,8 @@ export default function App() {
   };
 
   const handleQuickAddContact = async (newContact: Contact): Promise<boolean> => {
-    if (contacts.some(c => c.phone === newContact.phone)) {
-      alert('A customer with this WhatsApp number already exists.');
+    if (contacts.some(c => formatWhatsAppPhone(c.phone) === formatWhatsAppPhone(newContact.phone))) {
+      setSyncError('A patient with this WhatsApp number already exists.');
       return false;
     }
     const updatedContactsList = [newContact, ...contacts];
@@ -1777,6 +1819,21 @@ export default function App() {
 
     localStorage.setItem('crm_contacts', JSON.stringify(updatedContactsList));
     localStorage.setItem(`nestam_contacts_${selectedIndustry}`, JSON.stringify(updatedContactsList));
+
+    try {
+      const response = await authenticatedFetch('/api/crm/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newContact),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error?.message || 'Patient directory sync failed.');
+      if (payload?.item) {
+        setContacts((current) => [payload.item as Contact, ...current.filter((contact) => formatWhatsAppPhone(contact.phone) !== formatWhatsAppPhone(newContact.phone))]);
+      }
+    } catch (error: any) {
+      setSyncError(`Patient saved locally, but the secure directory sync needs attention: ${error.message || 'unknown error'}`);
+    }
 
     if (accessToken && spreadsheetId) {
       try {
@@ -1992,6 +2049,20 @@ export default function App() {
     
     setContacts(updatedContacts);
     setInteractions(updatedInteractions);
+
+    try {
+      const response = await authenticatedFetch('/api/crm/interactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newInteraction),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error?.message || 'Patient timeline sync failed.');
+      }
+    } catch (error: any) {
+      setSyncError(`Interaction saved locally, but server sync needs attention: ${error.message || 'unknown error'}`);
+    }
 
     // If connected to sheets, append right away
     if (accessToken && spreadsheetId) {
