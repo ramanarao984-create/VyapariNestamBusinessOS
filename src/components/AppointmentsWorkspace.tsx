@@ -59,6 +59,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
   const [apptTreatment, setApptTreatment] = useState('General Consultation');
   const [apptTime, setApptTime] = useState('09:00 AM');
   const [apptNotes, setApptNotes] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Doctor color mapper
   const getDocColorBadge = (color?: string) => {
@@ -116,9 +117,10 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
   const handleSaveDoctor = (e: React.FormEvent) => {
     e.preventDefault();
     if (!docName.trim() || !docTitle.trim()) {
-      alert('Please enter doctor name and specialization title.');
+      setFormError('Enter both the doctor name and specialization before saving.');
       return;
     }
+    setFormError(null);
     const initials = docName.replace('Dr.', '').trim().split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'DR';
     onAddDoctor({
       name: docName.startsWith('Dr.') ? docName.trim() : `Dr. ${docName.trim()}`,
@@ -145,9 +147,10 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
   const handleSaveAppt = (e: React.FormEvent) => {
     e.preventDefault();
     if (!apptDocId || !apptPatientName.trim()) {
-      alert('Please select a doctor and enter patient name.');
+      setFormError('Choose a doctor and enter the patient name before booking.');
       return;
     }
+    setFormError(null);
     const docObj = doctors.find(d => d.id === apptDocId);
     onAddAppointment({
       docId: apptDocId,
@@ -199,7 +202,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => setIsAddDoctorModalOpen(true)}
+            onClick={() => { setFormError(null); setIsAddDoctorModalOpen(true); }}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs rounded-xl border border-slate-250 shadow-3xs transition-all cursor-pointer"
           >
             <UserPlus className="h-3.5 w-3.5 text-slate-500" />
@@ -207,7 +210,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
           </button>
 
           <button
-            onClick={() => setIsApptModalOpen(true)}
+            onClick={() => { setFormError(null); setIsApptModalOpen(true); }}
             className="flex items-center gap-1.5 px-4 py-2 bg-[#0d9488] hover:bg-[#0f766e] text-white font-black text-xs rounded-xl shadow-md shadow-teal-600/20 transition-all cursor-pointer"
           >
             <Plus className="h-4 w-4" />
@@ -267,7 +270,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
                 Clinic Doctors ({doctors.length})
               </h4>
               <button
-                onClick={() => setIsAddDoctorModalOpen(true)}
+                onClick={() => { setFormError(null); setIsAddDoctorModalOpen(true); }}
                 className="text-[11px] font-bold text-teal-600 hover:text-teal-800 flex items-center gap-1 cursor-pointer bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-200"
               >
                 <Plus className="h-3 w-3" /> Add
@@ -559,7 +562,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
                       <CalendarIcon className="h-8 w-8 text-slate-300 mx-auto" />
                       <p className="text-xs font-bold text-slate-600">No appointments scheduled for this date.</p>
                       <button
-                        onClick={() => setIsApptModalOpen(true)}
+                        onClick={() => { setFormError(null); setIsApptModalOpen(true); }}
                         className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold cursor-pointer inline-flex items-center gap-1"
                       >
                         <Plus className="h-3.5 w-3.5" /> Book Appointment
@@ -701,6 +704,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
             </div>
 
             <form onSubmit={handleSaveDoctor} className="space-y-3.5">
+              {formError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800">{formError}</div>}
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                   Doctor Full Name *
@@ -806,6 +810,7 @@ export const AppointmentsWorkspace: React.FC<AppointmentsWorkspaceProps> = ({
             </div>
 
             <form onSubmit={handleSaveAppt} className="space-y-3.5">
+              {formError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800">{formError}</div>}
               {/* Doctor Selection */}
               <div>
                 <label className="block text-[10px] font-bold text-teal-700 uppercase tracking-wider mb-1">
