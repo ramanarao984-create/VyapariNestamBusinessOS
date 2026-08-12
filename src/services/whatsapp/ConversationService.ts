@@ -5,6 +5,7 @@
 
 import { getSupabaseClient } from '../../supabase/client';
 import { logger } from '../metadata/logger';
+import { CrmContactService } from '../crm/CrmContactService';
 import { ParsedInboundMessage, ParsedStatusUpdate } from './WebhookService';
 
 export interface ConversationRecord {
@@ -183,6 +184,35 @@ export class ConversationService {
     }
   }
 
+  private static async synchronizePatientLink(
+    conversation: ConversationRecord,
+    phone: string,
+    contactName: string
+  ): Promise<ConversationRecord> {
+    try {
+      const contact = await CrmContactService.ensureContact({
+        tenantId: conversation.tenant_id,
+        phone,
+        name: contactName,
+        source: 'WhatsApp',
+      });
+      await CrmContactService.linkConversation({
+        tenantId: conversation.tenant_id,
+        conversationId: conversation.id,
+        contactId: contact.id,
+        contactName: contact.name,
+      });
+      return { ...conversation, contact_id: contact.id, contact_name: contact.name };
+    } catch (error: any) {
+      // Keep message delivery operational until the CRM migration is applied.
+      logger.warn('ConversationService', 'CRM patient link was not persisted.', {
+        conversationId: conversation.id,
+        code: error?.code,
+      });
+      return conversation;
+    }
+  }
+
   /**
    * Ensures a conversation record exists for a tenant & contact phone number
    */
@@ -205,7 +235,7 @@ export class ConversationService {
       }
 
       if (existing) {
-        return existing as ConversationRecord;
+        return await this.synchronizePatientLink(existing as ConversationRecord, formattedPhone, contactName);
       }
 
       const conversationId = `conv_${tenantId}_${formattedPhone}`;
@@ -231,7 +261,7 @@ export class ConversationService {
         this.handleDatabaseError(insertErr, `ensureConversation.upsert(${formattedPhone})`);
       }
 
-      return (data as ConversationRecord) || newConv;
+      return await this.synchronizePatientLink((data as ConversationRecord) || newConv, formattedPhone, contactName);
     } catch (err: any) {
       if (err.code === 'WHATSAPP_SCHEMA_NOT_READY' || err.code === 'WHATSAPP_DATABASE_UNAVAILABLE') {
         throw err;
@@ -285,6 +315,23 @@ export class ConversationService {
         .update({ last_message_at: now, updated_at: now, contact_name: msg.contactName || conversation.contact_name })
         .eq('tenant_id', msg.tenantId)
         .eq('id', conversation.id);
+
+      if (conversation.contact_id) {
+        try {
+          await CrmContactService.recordInteraction({
+            id: `interaction_${newMsgPayload.id}`,
+            tenantId: msg.tenantId,
+            contactId: conversation.contact_id,
+            conversationId: conversation.id,
+            type: 'Incoming Message',
+            notes: msg.textBody || `[${msg.messageType || 'text'} message]`,
+            outcome: 'received',
+            occurredAt: msg.timestamp || now,
+          });
+        } catch (crmError: any) {
+          logger.warn('ConversationService', 'Inbound message was saved but CRM interaction sync failed.', { code: crmError?.code });
+        }
+      }
 
       return {
         conversation,
@@ -353,6 +400,30 @@ export class ConversationService {
         .update({ last_message_at: now, updated_at: now })
         .eq('tenant_id', tenantId)
         .eq('id', conversationId);
+
+      const { data: conversation } = await supabase
+        .from('whatsapp_conversations')
+        .select('contact_id')
+        .eq('tenant_id', tenantId)
+        .eq('id', conversationId)
+        .maybeSingle();
+
+      if (conversation?.contact_id) {
+        try {
+          await CrmContactService.recordInteraction({
+            id: `interaction_${newMsgPayload.id}`,
+            tenantId,
+            contactId: conversation.contact_id,
+            conversationId,
+            type: 'WhatsApp Sent',
+            notes: newMsgPayload.body || `[${messageType} message]`,
+            outcome: status,
+            occurredAt: now,
+          });
+        } catch (crmError: any) {
+          logger.warn('ConversationService', 'Outbound message was saved but CRM interaction sync failed.', { code: crmError?.code });
+        }
+      }
 
       return (data as MessageRecord) || newMsgPayload;
     } catch (err: any) {

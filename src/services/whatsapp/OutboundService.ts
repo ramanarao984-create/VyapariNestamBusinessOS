@@ -23,6 +23,7 @@ export interface SendMessageOptions {
   mediaUrl?: string;
   source?: 'human' | 'ai' | 'template' | 'automation';
   conversationId?: string;
+  contactName?: string;
   isOptOutConfirmation?: boolean;
 }
 
@@ -107,6 +108,7 @@ export class OutboundService {
       mediaUrl,
       source = 'human',
       conversationId: providedConvId,
+      contactName,
     } = options;
 
     if (!tenantId || !recipientPhone) {
@@ -161,7 +163,7 @@ export class OutboundService {
         }
         conversation = { id: data.id };
       } else {
-        conversation = await ConversationService.ensureConversation(tenantId, cleanPhone);
+        conversation = await ConversationService.ensureConversation(tenantId, cleanPhone, contactName || 'New Lead');
       }
     } catch (convErr: any) {
       logger.error('OutboundService', 'Failed to ensure outbound conversation.', convErr, { tenantId });

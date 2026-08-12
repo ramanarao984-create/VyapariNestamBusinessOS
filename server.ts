@@ -32,6 +32,7 @@ import { SectorConfigService } from "./src/services/sector/SectorConfigService";
 import { APPROVED_MEDICAL_SECTOR_IDS, IndustryType, isApprovedSectorId } from "./src/industryConfig";
 import { DurableAutomationEngine } from "./src/services/automation/DurableAutomationEngine";
 import { getTrustedTenantId } from "./src/auth/trustedTenant";
+import { CrmContactService, CrmContactRecord } from "./src/services/crm/CrmContactService";
 import crypto from 'crypto';
 
 function timingSafeSecretCompare(provided: string, expected: string): boolean {
@@ -104,6 +105,133 @@ app.get("/api/health", async (req: any, res: any, next) => {
     res.status(status).json(report);
   } catch (err) {
     next(err);
+  }
+});
+
+function toCrmContactDto(contact: CrmContactRecord) {
+  return {
+    id: contact.id,
+    name: contact.name,
+    phone: `+${contact.normalized_phone}`,
+    email: contact.email || undefined,
+    category: contact.category,
+    notes: contact.notes,
+    lastContacted: contact.last_contacted_at || 'Never',
+    createdAt: contact.created_at,
+    treatmentType: contact.treatment_type || undefined,
+    treatmentValue: contact.treatment_value ?? undefined,
+    amountCollected: contact.amount_collected ?? undefined,
+    paymentMethod: contact.payment_method || undefined,
+    pipelineStage: contact.pipeline_stage || undefined,
+    photos: contact.photos || [],
+    aiAutopilot: contact.ai_autopilot,
+    source: contact.source || 'WhatsApp',
+  };
+}
+
+function toCrmInteractionDto(interaction: any) {
+  return {
+    id: interaction.id,
+    contactId: interaction.contact_id,
+    contactName: '',
+    type: interaction.type,
+    notes: interaction.notes,
+    outcome: interaction.outcome || undefined,
+    timestamp: interaction.occurred_at,
+  };
+}
+
+// CRM directory endpoints. Browser clients use these authenticated endpoints only.
+app.get("/api/crm/contacts", requireAuthenticatedUser, requireRole('Owner', 'Admin', 'Doctor', 'Receptionist', 'ReadOnly'), async (req: any, res: any) => {
+  try {
+    const contacts = await CrmContactService.listContacts(req.auth.tenantId);
+    return res.json({ items: contacts.map(toCrmContactDto) });
+  } catch (error: any) {
+    const status = error?.code === 'CRM_SCHEMA_NOT_READY' ? 503 : 500;
+    return res.status(status).json({ error: { code: error?.code || 'CRM_DATABASE_UNAVAILABLE', message: error?.message || 'CRM patient directory is unavailable.' } });
+  }
+});
+
+app.get("/api/crm/interactions", requireAuthenticatedUser, requireRole('Owner', 'Admin', 'Doctor', 'Receptionist', 'ReadOnly'), async (req: any, res: any) => {
+  try {
+    const interactions = await CrmContactService.listInteractions(req.auth.tenantId, typeof req.query.contactId === 'string' ? req.query.contactId : undefined);
+    const contacts = await CrmContactService.listContacts(req.auth.tenantId);
+    const namesById = new Map(contacts.map((contact) => [contact.id, contact.name]));
+    return res.json({ items: interactions.map((interaction) => ({ ...toCrmInteractionDto(interaction), contactName: namesById.get(interaction.contact_id) || 'Patient' })) });
+  } catch (error: any) {
+    const status = error?.code === 'CRM_SCHEMA_NOT_READY' ? 503 : 500;
+    return res.status(status).json({ error: { code: error?.code || 'CRM_DATABASE_UNAVAILABLE', message: error?.message || 'CRM patient timeline is unavailable.' } });
+  }
+});
+
+app.post("/api/crm/contacts", requireAuthenticatedUser, requireRole('Owner', 'Admin', 'Doctor', 'Receptionist'), async (req: any, res: any) => {
+  const { phone, name, ...changes } = req.body || {};
+  if (!phone) return res.status(400).json({ error: { code: 'INVALID_PATIENT', message: 'A patient phone number is required.' } });
+  try {
+    const contact = await CrmContactService.ensureContact({ tenantId: req.auth.tenantId, phone, name, source: changes.source || 'Website' });
+    const updated = await CrmContactService.updateContact(req.auth.tenantId, contact.id, {
+      name: name || contact.name,
+      email: changes.email,
+      category: changes.category,
+      notes: changes.notes,
+      treatment_type: changes.treatmentType,
+      treatment_value: changes.treatmentValue,
+      amount_collected: changes.amountCollected,
+      payment_method: changes.paymentMethod,
+      pipeline_stage: changes.pipelineStage,
+      photos: changes.photos,
+      ai_autopilot: changes.aiAutopilot,
+      source: changes.source,
+    });
+    return res.status(201).json({ item: toCrmContactDto(updated) });
+  } catch (error: any) {
+    const status = error?.code === 'CRM_SCHEMA_NOT_READY' ? 503 : 500;
+    return res.status(status).json({ error: { code: error?.code || 'CRM_CONTACT_CREATE_FAILED', message: error?.message || 'Patient could not be saved.' } });
+  }
+});
+
+app.patch("/api/crm/contacts/:id", requireAuthenticatedUser, requireRole('Owner', 'Admin', 'Doctor', 'Receptionist'), async (req: any, res: any) => {
+  const changes = req.body || {};
+  try {
+    const updated = await CrmContactService.updateContact(req.auth.tenantId, req.params.id, {
+      name: changes.name,
+      email: changes.email,
+      category: changes.category,
+      notes: changes.notes,
+      treatment_type: changes.treatmentType,
+      treatment_value: changes.treatmentValue,
+      amount_collected: changes.amountCollected,
+      payment_method: changes.paymentMethod,
+      pipeline_stage: changes.pipelineStage,
+      photos: changes.photos,
+      ai_autopilot: changes.aiAutopilot,
+      source: changes.source,
+      last_contacted_at: changes.lastContacted && changes.lastContacted !== 'Never' ? changes.lastContacted : undefined,
+    });
+    return res.json({ item: toCrmContactDto(updated) });
+  } catch (error: any) {
+    const status = error?.code === 'CRM_CONTACT_NOT_FOUND' ? 404 : error?.code === 'CRM_SCHEMA_NOT_READY' ? 503 : 500;
+    return res.status(status).json({ error: { code: error?.code || 'CRM_CONTACT_UPDATE_FAILED', message: error?.message || 'Patient could not be updated.' } });
+  }
+});
+
+app.post("/api/crm/interactions", requireAuthenticatedUser, requireRole('Owner', 'Admin', 'Doctor', 'Receptionist'), async (req: any, res: any) => {
+  const { contactId, type, notes, outcome, timestamp, conversationId } = req.body || {};
+  if (!contactId || !type || !notes) return res.status(400).json({ error: { code: 'INVALID_INTERACTION', message: 'contactId, type, and notes are required.' } });
+  try {
+    const interaction = await CrmContactService.recordInteraction({
+      tenantId: req.auth.tenantId,
+      contactId,
+      conversationId,
+      type,
+      notes,
+      outcome,
+      occurredAt: timestamp,
+    });
+    return res.status(201).json({ item: toCrmInteractionDto(interaction) });
+  } catch (error: any) {
+    const status = error?.code === 'CRM_SCHEMA_NOT_READY' ? 503 : 500;
+    return res.status(status).json({ error: { code: error?.code || 'CRM_INTERACTION_CREATE_FAILED', message: error?.message || 'Interaction could not be saved.' } });
   }
 });
 
@@ -813,7 +941,7 @@ app.post("/api/whatsapp/embedded-signup/callback", requireAuthenticatedUser, req
 // 6. Secure Outbound Messaging Endpoint
 app.post("/api/whatsapp/send", requireAuthenticatedUser, requireProductionAccess, requireRole('Owner', 'Admin', 'Doctor', 'Receptionist'), async (req: any, res: any) => {
   const tenantId = req.auth.tenantId;
-  const { recipient, message, messageType, templateName, templateLanguage, templateComponents, mediaUrl, conversationId } = req.body;
+  const { recipient, message, messageType, templateName, templateLanguage, templateComponents, mediaUrl, conversationId, contactName } = req.body;
 
   if (!recipient || (!message && !templateName && !mediaUrl)) {
     return res.status(400).json({ success: false, error: "Missing required fields (recipient, message or templateName or mediaUrl)" });
@@ -831,6 +959,7 @@ app.post("/api/whatsapp/send", requireAuthenticatedUser, requireProductionAccess
       mediaUrl,
       source: "human",
       conversationId,
+      contactName,
     });
 
     if (!result.success) {
